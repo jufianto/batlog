@@ -41,6 +41,19 @@ type Snapshot struct {
 	HasMacOSMinutes bool
 	RawCurrentMAh   int // gauge-measured; 0 when absent
 	RawMaxMAh       int
+	Health          Health
+}
+
+// Health is the detail `batlog health` shows. Every field is nil when its
+// ioreg key is absent, which varies by Mac model.
+type Health struct {
+	Cycles        *int     // CycleCount
+	DesignMAh     *int     // DesignCapacity
+	RawMaxMAh     *int     // AppleRawMaxCapacity: the gauge's measured full charge
+	NominalMAh    *int     // NominalChargeCapacity: Apple's smoothed figure; absent on older Intel
+	TempC         *float64 // Temperature is in hundredths of a degree
+	VoltageV      *float64 // Voltage is in mV
+	FailureStatus *int     // PermanentFailureStatus: 0 means normal
 }
 
 // Parse turns `ioreg -rc AppleSmartBattery -a` output into a Snapshot.
@@ -92,7 +105,34 @@ func Parse(data []byte) (Snapshot, error) {
 	if t, ok := intKey(m, "TimeRemaining"); ok && t >= 0 && t != timeUnknown {
 		s.MacOSMinutes, s.HasMacOSMinutes = int(t), true
 	}
+	s.Health = Health{
+		Cycles:        intPtr(m, "CycleCount"),
+		DesignMAh:     intPtr(m, "DesignCapacity"),
+		RawMaxMAh:     intPtr(m, "AppleRawMaxCapacity"),
+		NominalMAh:    intPtr(m, "NominalChargeCapacity"),
+		TempC:         scaledPtr(m, "Temperature", 100),
+		VoltageV:      scaledPtr(m, "Voltage", 1000),
+		FailureStatus: intPtr(m, "PermanentFailureStatus"),
+	}
 	return s, nil
+}
+
+func intPtr(m map[string]any, k string) *int {
+	v, ok := intKey(m, k)
+	if !ok {
+		return nil
+	}
+	i := int(v)
+	return &i
+}
+
+func scaledPtr(m map[string]any, k string, div float64) *float64 {
+	v, ok := intKey(m, k)
+	if !ok {
+		return nil
+	}
+	f := float64(v) / div
+	return &f
 }
 
 // intKey reads an integer key. The plist library decodes non-negative
