@@ -297,6 +297,11 @@ func (d *DB) RecordRunStart(ctx context.Context, ts int64) error {
 // RunStartsBetween returns recorder starts with from <= started <= to, oldest
 // first. A database from before the runs table has none.
 func (d *DB) RunStartsBetween(ctx context.Context, from, to int64) ([]int64, error) {
+	// Readers do not migrate: the recorder upgrades the file on its next start.
+	var n int
+	if err := d.sql.QueryRowContext(ctx, `SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'runs'`).Scan(&n); err != nil || n == 0 {
+		return nil, err
+	}
 	rows, err := d.sql.QueryContext(ctx, `SELECT started FROM runs WHERE started BETWEEN ? AND ? ORDER BY started`, from, to)
 	if err != nil {
 		return nil, err

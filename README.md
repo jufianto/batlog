@@ -4,8 +4,9 @@ A macOS command-line tool that records your battery and per-app energy in the
 background, so "my battery only lasts 5 hours" becomes a question you can
 answer with numbers.
 
-> **Status: early development.** `batlog status`, `batlog health` and the
-> background recorder (`batlog daemon install`) work; the recorder logs
+> **Status: early development.** `batlog status`, `batlog health`,
+> `batlog history` and the background recorder (`batlog daemon install`)
+> work; the recorder logs
 > battery samples, and per-app energy follows. The other commands are being
 > built in the order listed in [docs/README.md](./docs/README.md). Build from
 > source with `CGO_ENABLED=0 go build .` (Go 1.27).

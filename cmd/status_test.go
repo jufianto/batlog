@@ -215,7 +215,7 @@ func TestStatusProbeErrorPropagates(t *testing.T) {
 }
 
 func TestFmtDuration(t *testing.T) {
-	for m, want := range map[int]string{340: "5h 40m", 59: "59m", 60: "1h 0m", 0: "0m"} {
+	for m, want := range map[int]string{340: "5h 40m", 59: "59m", 60: "1h 00m", 65: "1h 05m", 0: "0m"} {
 		if got := fmtDuration(m); got != want {
 			t.Errorf("fmtDuration(%d) = %q, want %q", m, got, want)
 		}

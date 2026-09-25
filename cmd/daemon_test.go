@@ -128,12 +128,19 @@ func runCtx(t *testing.T, ctx context.Context, args ...string) (string, error) {
 		}
 	}
 	setCtx(rootCmd)
-	t.Cleanup(func() {
-		rootCmd.SetOut(nil)
-		rootCmd.SetErr(nil)
+	// Flag variables outlive an execution too; reset them before each run
+	// so one call's flags never leak into the next.
+	resetFlags := func() {
 		jsonOut = false
 		daemonOnce = false
 		daemonFollow = false
+		histToday, histWeek, histEvents, histSince = false, false, false, ""
+	}
+	resetFlags()
+	t.Cleanup(func() {
+		rootCmd.SetOut(nil)
+		rootCmd.SetErr(nil)
+		resetFlags()
 	})
 	err := rootCmd.ExecuteContext(ctx)
 	return out.String(), err

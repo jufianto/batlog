@@ -165,7 +165,7 @@ func fmtDuration(minutes int) string {
 	if minutes < 60 {
 		return fmt.Sprintf("%dm", minutes)
 	}
-	return fmt.Sprintf("%dh %dm", minutes/60, minutes%60)
+	return fmt.Sprintf("%dh %02dm", minutes/60, minutes%60)
 }
 
 func joinDot(parts []string) string {

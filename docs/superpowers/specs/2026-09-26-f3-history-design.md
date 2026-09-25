@@ -41,7 +41,13 @@ midnight). More than one range flag, an unparseable or future `--since`: exit 2.
 Samples are loaded from the last state change before the range, so a session
 that spans midnight has its real start: take the last sample before `from`,
 then the last sample before that with the other `on_ac`, and load everything
-from there to now.
+from there to now. Only a battery run needs the look-back: if the last
+sample before `from` is on AC, loading starts at that sample; if a battery run
+has no AC sample before it, loading starts at the first sample ever.
+
+`history` opens the database read-only and never migrates it: a schema-1 file
+(before `runs`) has no recorder starts, so all its gaps are sleep until the
+recorder's next start upgrades it.
 
 ## Rules
 
@@ -61,13 +67,17 @@ from there to now.
 - **pmset fallback** covers only the part of the range before the first daemon
   sample: events from source changes in the log, and battery sessions between
   them (end cut at the first daemon sample), each `source: "pmset"`, with no
-  awake time, drain or totals. They are never merged with daemon sessions.
+  awake time, drain or totals. A pmset session starts only at an unplug: the
+  log's first line is where the log begins, not when the Mac went on battery.
+  They are never merged with daemon sessions, and "battery lasted" comes from
+  daemon sessions only.
 
 ## Output
 
 Human as in the spec, plus a `battery lasted` headline line, `· no data Xh`
 in the totals when there were data gaps, times prefixed with `yesterday` or
-`Thu 24 Sep` when outside the range's first day, and `(pmset)` on fallback
+`Thu 24 Sep` when not today (for `--today` that is the range's first day),
+durations as `4h 05m` (shared with `status`), and `(pmset)` on fallback
 rows. JSON as in the spec plus `battery_lasted {minutes, ongoing}`,
 `data_gap` per session and `totals.gap_min`; timestamps are unix seconds;
 `--events --json` is `{range, events: [{ts, type, pct, source}]}` ascending.
