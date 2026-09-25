@@ -54,6 +54,16 @@ func Program(data []byte) (string, error) {
 	return a.ProgramArguments[0], nil
 }
 
+// Env returns the environment an installed plist gives the recorder, so
+// status and uninstall look where the daemon writes.
+func Env(data []byte) (map[string]string, error) {
+	var a agent
+	if _, err := plist.Unmarshal(data, &a); err != nil {
+		return nil, fmt.Errorf("read plist: %w", err)
+	}
+	return a.EnvironmentVariables, nil
+}
+
 // bootstrapAttempts covers launchd's habit of refusing a bootstrap with
 // "5: Input/output error" while the previous instance is still going away.
 const bootstrapAttempts = 3
