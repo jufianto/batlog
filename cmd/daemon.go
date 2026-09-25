@@ -31,18 +31,15 @@ type daemonCtl interface {
 
 // Swapped by tests so nothing touches the real launchd or ~/Library.
 var (
-	agentPath  = paths.LaunchAgent
-	logPath    = paths.Log
-	homeDir    = os.UserHomeDir
-	newCtl     = func() daemonCtl { return launchd.New(os.Getuid(), paths.AgentLabel) }
-	executable = func() (string, error) {
-		p, err := os.Executable()
-		if err != nil {
-			return "", err
-		}
-		return filepath.EvalSymlinks(p)
-	}
-	tickEvery = time.Minute
+	agentPath = paths.LaunchAgent
+	logPath   = paths.Log
+	homeDir   = os.UserHomeDir
+	newCtl    = func() daemonCtl { return launchd.New(os.Getuid(), paths.AgentLabel) }
+	// Not resolved through symlinks: the plist must name the stable path
+	// (Homebrew's /opt/homebrew/bin/batlog), not the versioned Cellar target
+	// that `brew upgrade` deletes.
+	executable = os.Executable
+	tickEvery  = time.Minute
 )
 
 const (
@@ -95,8 +92,12 @@ func runInstall(out io.Writer) error {
 	if err != nil {
 		return fmt.Errorf("find batlog binary: %w", err)
 	}
-	if strings.Contains(bin, "/go-build") {
-		return fmt.Errorf("install from a built binary, not 'go run' (%s is temporary)", bin)
+	resolved, err := filepath.EvalSymlinks(bin)
+	if err != nil {
+		resolved = bin
+	}
+	if strings.Contains(resolved, "/go-build") {
+		return fmt.Errorf("install from a built binary, not 'go run' (%s is temporary)", resolved)
 	}
 	dbp, err := dbPath()
 	if err != nil {
