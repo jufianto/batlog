@@ -1,0 +1,19 @@
+# Build output
+/batlog
+/dist/
+*.test
+*.out
+coverage.*
+
+# Local data — never commit a real database
+*.db
+*.db-wal
+*.db-shm
+
+# macOS
+.DS_Store
+
+# Editors
+.idea/
+.vscode/
+*.swp
