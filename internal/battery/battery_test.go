@@ -2,6 +2,7 @@ package battery
 
 import (
 	"errors"
+	"fmt"
 	"math"
 	"os"
 	"path/filepath"
@@ -106,4 +107,67 @@ func TestParseGarbageIsUnrecognised(t *testing.T) {
 			t.Errorf("Parse(%q) error = %v, want ErrUnrecognised", src, err)
 		}
 	}
+}
+
+func intp(v int) *int         { return &v }
+func f64p(v float64) *float64 { return &v }
+func eqInt(a, b *int) bool    { return (a == nil) == (b == nil) && (a == nil || *a == *b) }
+func eqF(a, b *float64) bool  { return (a == nil) == (b == nil) && (a == nil || math.Abs(*a-*b) < 1e-9) }
+
+func TestParseHealthFields(t *testing.T) {
+	cases := []struct {
+		file string
+		want Health
+	}{
+		{"Mac16,8-15.7.3.plist", Health{Cycles: intp(388), DesignMAh: intp(6249), RawMaxMAh: intp(5424), NominalMAh: intp(5576),
+			TempC: f64p(30.91), VoltageV: f64p(13.1), FailureStatus: intp(0)}},
+		{"intel-nominal-synthetic.plist", Health{Cycles: intp(512), DesignMAh: intp(5800), RawMaxMAh: intp(5100), NominalMAh: intp(4950),
+			TempC: f64p(30.12), VoltageV: f64p(11.8), FailureStatus: intp(4)}},
+		// No NominalChargeCapacity and no PermanentFailureStatus: both stay nil.
+		{"intel-synthetic.plist", Health{Cycles: intp(512), DesignMAh: intp(5800), RawMaxMAh: intp(5100),
+			TempC: f64p(30.12), VoltageV: f64p(11.8)}},
+	}
+	for _, c := range cases {
+		s, err := Parse(fixture(t, c.file))
+		if err != nil {
+			t.Fatalf("%s: %v", c.file, err)
+		}
+		h, w := s.Health, c.want
+		if !eqInt(h.Cycles, w.Cycles) || !eqInt(h.DesignMAh, w.DesignMAh) || !eqInt(h.RawMaxMAh, w.RawMaxMAh) ||
+			!eqInt(h.NominalMAh, w.NominalMAh) || !eqInt(h.FailureStatus, w.FailureStatus) ||
+			!eqF(h.TempC, w.TempC) || !eqF(h.VoltageV, w.VoltageV) {
+			t.Errorf("%s: Health = %s, want %s", c.file, fmtHealth(h), fmtHealth(w))
+		}
+	}
+}
+
+func TestParseHealthMissingKeysStayNil(t *testing.T) {
+	src := `<?xml version="1.0"?><plist version="1.0"><array><dict>
+<key>CurrentCapacity</key><integer>50</integer>
+<key>MaxCapacity</key><integer>100</integer>
+</dict></array></plist>`
+	s, err := Parse([]byte(src))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if h := s.Health; h != (Health{}) {
+		t.Errorf("Health = %s, want all nil", fmtHealth(h))
+	}
+}
+
+func fmtHealth(h Health) string {
+	i := func(p *int) any {
+		if p == nil {
+			return "nil"
+		}
+		return *p
+	}
+	f := func(p *float64) any {
+		if p == nil {
+			return "nil"
+		}
+		return *p
+	}
+	return fmt.Sprintf("{cycles:%v design:%v raw:%v nominal:%v temp:%v volt:%v fail:%v}",
+		i(h.Cycles), i(h.DesignMAh), i(h.RawMaxMAh), i(h.NominalMAh), f(h.TempC), f(h.VoltageV), i(h.FailureStatus))
 }
