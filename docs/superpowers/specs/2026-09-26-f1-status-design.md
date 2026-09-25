@@ -10,7 +10,7 @@ records how the code is shaped.
 ## Layout
 
 Same shape as caddyku and serverku. Module `github.com/jufianto/batlog`,
-`go 1.26`, always built with `CGO_ENABLED=0` ([ADR-0001](../../adr/0001-pure-go-no-cgo.md)).
+`go 1.27`, always built with `CGO_ENABLED=0` ([ADR-0001](../../adr/0001-pure-go-no-cgo.md)).
 
 ```
 main.go                        calls cmd.Execute()

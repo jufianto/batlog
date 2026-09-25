@@ -29,4 +29,14 @@ number — remove the `Serial` lines first if you would rather not share them.
 
 ## Build and test
 
-Not yet — see the status note in the README.
+```sh
+CGO_ENABLED=0 go build .      # produces ./batlog
+CGO_ENABLED=0 go test ./...   # no test shells out; passes on Linux too
+```
+
+Go 1.27 or newer. With an older Go installed, the `toolchain` line in
+`go.mod` makes `go` download the right version automatically.
+
+Battery parsing is tested against `ioreg` dumps in
+`internal/battery/testdata/`. `intel-synthetic.plist` is hand-written; a real
+Intel dump (see above) would replace it.
