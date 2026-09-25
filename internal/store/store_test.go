@@ -396,3 +396,20 @@ func TestMigratingAVersionOneDatabaseAddsRuns(t *testing.T) {
 	}
 	db.Close()
 }
+
+func TestRunStartsOnASchemaOneDatabase(t *testing.T) {
+	db, path := openTemp(t)
+	ctx := context.Background()
+	if err := db.Exec(ctx, "DROP TABLE runs"); err != nil {
+		t.Fatal(err)
+	}
+	ro, err := Open(path, true) // history reads without migrating
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ro.Close()
+	got, err := ro.RunStartsBetween(ctx, 0, 1<<40)
+	if err != nil || got != nil {
+		t.Errorf("RunStartsBetween = %v, %v; want none from a database before the runs table", got, err)
+	}
+}
