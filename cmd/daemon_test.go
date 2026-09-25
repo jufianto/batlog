@@ -56,6 +56,7 @@ func stubDaemon(t *testing.T) *daemonEnv {
 	executable = func() (string, error) { return "/opt/bin/batlog", nil }
 	homeDir = func() (string, error) { return dir, nil }
 	t.Setenv("BATLOG_HOME", "")
+	t.Setenv("XPC_SERVICE_NAME", "") // as in a terminal, not under launchd
 	t.Cleanup(func() { agentPath, logPath, newCtl, executable, homeDir = oldAgent, oldLog, oldCtl, oldExe, oldHome })
 	return e
 }
@@ -390,5 +391,20 @@ func TestDaemonUsageErrors(t *testing.T) {
 		if !errors.As(err, &ue) {
 			t.Errorf("%v: err = %v, want usage error", args, err)
 		}
+	}
+}
+
+func TestRunUnderLaunchdDoesNotWarnAfterRestart(t *testing.T) {
+	// After a crash, launchd restarts the recorder within seconds; the
+	// recent tick is its own predecessor's, not a second recorder.
+	e := stubDaemon(t)
+	e.seedTicks(t, testNow.Unix()-12)
+	t.Setenv("XPC_SERVICE_NAME", "dev.jufi.batlog")
+	out, err := run(t, "daemon", "run", "--once")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(out, "another recorder") {
+		t.Errorf("launchd restart must not warn:\n%s", out)
 	}
 }
