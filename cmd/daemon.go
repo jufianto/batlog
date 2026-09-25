@@ -114,7 +114,11 @@ func runInstall(out io.Writer) error {
 		return err
 	}
 	var env map[string]string
-	if h := os.Getenv("BATLOG_HOME"); h != "" {
+	if os.Getenv("BATLOG_HOME") != "" {
+		h, err := paths.Home() // absolute: launchd runs the daemon from "/"
+		if err != nil {
+			return err
+		}
 		env = map[string]string{"BATLOG_HOME": h}
 	}
 	data, err := launchd.Plist(paths.AgentLabel, bin, logp, env)
@@ -162,8 +166,29 @@ func createDatabase(dbp string) error {
 	return db.Migrate(context.Background())
 }
 
+// daemonPaths is where the installed recorder writes: the plist's
+// BATLOG_HOME if it has one, otherwise this shell's paths.
+func daemonPaths(plistData []byte) (db, logFile string, err error) {
+	if plistData != nil {
+		if env, err := launchd.Env(plistData); err == nil && env["BATLOG_HOME"] != "" {
+			h := env["BATLOG_HOME"]
+			return filepath.Join(h, "batlog.db"), filepath.Join(h, "daemon.log"), nil
+		}
+	}
+	if db, err = dbPath(); err != nil {
+		return "", "", err
+	}
+	logFile, err = logPath()
+	return db, logFile, err
+}
+
 func runUninstall(out io.Writer) error {
 	ap, err := agentPath()
+	if err != nil {
+		return err
+	}
+	plistData, _ := os.ReadFile(ap)
+	dbp, logp, err := daemonPaths(plistData)
 	if err != nil {
 		return err
 	}
@@ -182,9 +207,11 @@ func runUninstall(out io.Writer) error {
 	if err := os.Remove(ap); err != nil && !errors.Is(err, fs.ErrNotExist) {
 		return err
 	}
-	dbp, _ := dbPath()
 	fmt.Fprintln(out, "✓ batlog daemon removed; nothing is recording now")
 	fmt.Fprintf(out, "data kept at %s — delete it yourself if you want it gone\n", tilde(filepath.Dir(dbp)))
+	if filepath.Dir(logp) != filepath.Dir(dbp) {
+		fmt.Fprintf(out, "log kept at %s\n", tilde(filepath.Dir(logp)))
+	}
 	return nil
 }
 
@@ -210,13 +237,14 @@ func collectDaemonState(ctx context.Context) (daemonState, error) {
 	if s.Plist, err = agentPath(); err != nil {
 		return s, err
 	}
-	if s.Database, err = dbPath(); err != nil {
+	data, readErr := os.ReadFile(s.Plist)
+	if readErr != nil {
+		data = nil
+	}
+	if s.Database, s.Log, err = daemonPaths(data); err != nil {
 		return s, err
 	}
-	if s.Log, err = logPath(); err != nil {
-		return s, err
-	}
-	if data, err := os.ReadFile(s.Plist); err == nil {
+	if readErr == nil {
 		s.Installed = true
 		if bin, err := launchd.Program(data); err == nil {
 			s.Binary = &bin

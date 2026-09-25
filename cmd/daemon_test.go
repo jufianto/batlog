@@ -203,8 +203,9 @@ func TestUninstallKeepsData(t *testing.T) {
 	if _, err := os.Stat(e.db); err != nil {
 		t.Error("database must be kept")
 	}
-	if !strings.Contains(out, "data kept at ~/Application Support/batlog — delete it yourself if you want it gone") {
-		t.Errorf("output:\n%s", out)
+	if !strings.Contains(out, "data kept at ~/Application Support/batlog — delete it yourself if you want it gone") ||
+		!strings.Contains(out, "log kept at ~/Logs/batlog") {
+		t.Errorf("uninstall must print both kept paths (ADR-0005):\n%s", out)
 	}
 }
 
@@ -442,5 +443,57 @@ func TestInstallRefusesGoRunBinaryBehindSymlink(t *testing.T) {
 	executable = func() (string, error) { return link, nil }
 	if _, err := run(t, "daemon", "install"); err == nil || !strings.Contains(err.Error(), "go run") {
 		t.Errorf("err = %v, want refusal of a go run build behind a link", err)
+	}
+}
+
+func TestInstallWritesAbsoluteBatlogHome(t *testing.T) {
+	e := stubDaemon(t)
+	t.Chdir(e.dir)
+	t.Setenv("BATLOG_HOME", "rel/data")
+	if _, err := run(t, "daemon", "install"); err != nil {
+		t.Fatal(err)
+	}
+	env, err := launchd.Env(mustRead(t, e.agent))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if h := env["BATLOG_HOME"]; !filepath.IsAbs(h) || !strings.HasSuffix(h, "/rel/data") {
+		t.Errorf("plist BATLOG_HOME = %q, want an absolute path", h)
+	}
+}
+
+func mustRead(t *testing.T, p string) []byte {
+	t.Helper()
+	b, err := os.ReadFile(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return b
+}
+
+func TestStatusFollowsThePlistsBatlogHome(t *testing.T) {
+	// Installed with BATLOG_HOME=/elsewhere; status run from a shell
+	// without it must still report the daemon's real database.
+	e := stubDaemon(t)
+	elsewhere := filepath.Join(e.dir, "elsewhere")
+	bin := filepath.Join(e.dir, "bin")
+	os.WriteFile(bin, nil, 0o755)
+	os.MkdirAll(filepath.Dir(e.agent), 0o755)
+	data, _ := launchd.Plist("dev.jufi.batlog", bin, filepath.Join(elsewhere, "daemon.log"), map[string]string{"BATLOG_HOME": elsewhere})
+	os.WriteFile(e.agent, data, 0o644)
+	e.ctl.loaded = true
+	other := &daemonEnv{db: filepath.Join(elsewhere, "batlog.db")}
+	other.seedTicks(t, testNow.Unix()-38)
+
+	out, err := run(t, "daemon", "status")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.HasPrefix(out, "● batlog daemon: running") || !strings.Contains(out, "~/elsewhere/batlog.db") || !strings.Contains(out, "~/elsewhere/daemon.log") {
+		t.Errorf("status must read the plist's BATLOG_HOME:\n%s", out)
+	}
+	out, _ = run(t, "daemon", "uninstall")
+	if !strings.Contains(out, "data kept at ~/elsewhere") {
+		t.Errorf("uninstall must name the daemon's data folder:\n%s", out)
 	}
 }

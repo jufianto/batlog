@@ -117,3 +117,14 @@ func TestBootoutAndLoaded(t *testing.T) {
 		t.Error("print failed, so the agent is not loaded")
 	}
 }
+
+func TestEnvReadsTheEnvironmentBack(t *testing.T) {
+	data, _ := Plist("l", "/b", "/log", map[string]string{"BATLOG_HOME": "/d"})
+	if env, err := Env(data); err != nil || env["BATLOG_HOME"] != "/d" {
+		t.Errorf("Env = %v, %v", env, err)
+	}
+	data, _ = Plist("l", "/b", "/log", nil)
+	if env, err := Env(data); err != nil || len(env) != 0 {
+		t.Errorf("no env: Env = %v, %v", env, err)
+	}
+}
