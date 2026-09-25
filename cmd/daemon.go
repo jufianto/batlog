@@ -348,7 +348,11 @@ func runRecorder(ctx context.Context, out io.Writer, once bool) error {
 	}
 	defer db.Close()
 
-	if v, ok, err := db.Meta(ctx, "last_tick"); err == nil && ok {
+	// launchd sets XPC_SERVICE_NAME to the agent's label. Under launchd a
+	// recent tick is the previous instance's (crash restart, re-install), so
+	// the warning is only for a recorder started by hand.
+	underLaunchd := os.Getenv("XPC_SERVICE_NAME") == paths.AgentLabel
+	if v, ok, err := db.Meta(ctx, "last_tick"); err == nil && ok && !underLaunchd {
 		if ts, err := strconv.ParseInt(v, 10, 64); err == nil {
 			if age := now().Unix() - ts; age >= 0 && time.Duration(age)*time.Second < busyTick {
 				logger.Printf("warning: another recorder wrote a tick %d s ago; is the daemon already running?", age)
