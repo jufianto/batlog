@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -158,6 +159,46 @@ func TestThousands(t *testing.T) {
 	for n, want := range map[int]string{5424: "5 424", 999: "999", 1000000: "1 000 000", 0: "0"} {
 		if got := thousands(n); got != want {
 			t.Errorf("thousands(%d) = %q, want %q", n, got, want)
+		}
+	}
+}
+
+// Golden output for every ioreg fixture, straight from the parser
+// (F2 acceptance: ≥ 3 fixtures, never crashing on a missing key).
+func TestHealthGoldenFromFixtures(t *testing.T) {
+	cases := map[string]string{
+		"Mac16,8-15.7.3.plist": "🔎 Battery health\n" +
+			"health         86.8%   (5 424 / 6 249 mAh design)\n" +
+			"Apple reports  89.2%   (smoothed)\n" +
+			"cycles         388\n" +
+			"temperature    30.9 °C\n" +
+			"voltage        13.10 V\n" +
+			"condition      Normal\n",
+		"intel-nominal-synthetic.plist": "🔎 Battery health\n" +
+			"health         87.9%   (5 100 / 5 800 mAh design)\n" +
+			"Apple reports  85.3%   (smoothed)\n" +
+			"cycles         512\n" +
+			"temperature    30.1 °C\n" +
+			"voltage        11.80 V\n" +
+			"condition      Service recommended (status 4)\n",
+		// No NominalChargeCapacity and no PermanentFailureStatus.
+		"intel-synthetic.plist": "🔎 Battery health\n" +
+			"health         87.9%   (5 100 / 5 800 mAh design)\n" +
+			"cycles         512\n" +
+			"temperature    30.1 °C\n" +
+			"voltage        11.80 V\n",
+	}
+	for file, want := range cases {
+		raw, err := os.ReadFile(filepath.Join("..", "internal", "battery", "testdata", file))
+		if err != nil {
+			t.Fatal(err)
+		}
+		snap, err := battery.Parse(raw)
+		if err != nil {
+			t.Fatalf("%s: %v", file, err)
+		}
+		if got, _ := runHealthT(t, snap.Health, filepath.Join(t.TempDir(), "none.db"), false, false, false); got != want {
+			t.Errorf("%s:\ngot:\n%s\nwant:\n%s", file, got, want)
 		}
 	}
 }

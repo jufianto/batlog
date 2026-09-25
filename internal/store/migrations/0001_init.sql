@@ -20,7 +20,8 @@ CREATE TABLE IF NOT EXISTS app_energy (
 );
 CREATE INDEX IF NOT EXISTS app_energy_app_ts ON app_energy (app, ts);
 
--- One row per calendar day, kept forever.
+-- One row per calendar day, kept forever. day is the LOCAL date as
+-- 'YYYY-MM-DD' (health.Since and the trend compare it as text).
 CREATE TABLE IF NOT EXISTS health (
     day         TEXT PRIMARY KEY,
     cycles      INTEGER,
