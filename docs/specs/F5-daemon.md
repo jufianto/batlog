@@ -29,7 +29,8 @@ batlog daemon install | uninstall | status | logs [-f] | run [--once]
 1. Battery probe (`ioreg`) → one `samples` row.
 2. Energy probe (`top`, grouped, top 15) → `app_energy` rows. Same transaction.
 3. Once per calendar day (first tick after midnight or after boot): write a
-   `health` row; roll up and prune raw rows older than 90 days.
+   `health` row (`day` = local date as `YYYY-MM-DD`; upsert, so a second
+   write the same day replaces the first); roll up and prune raw rows older than 90 days.
 4. Update `meta.last_tick`. Per-probe timeout 10 s. On any probe or write
    error: log it, skip the tick, continue. Never exit on a data error.
 
