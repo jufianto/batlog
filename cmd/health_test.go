@@ -202,3 +202,31 @@ func TestHealthGoldenFromFixtures(t *testing.T) {
 		}
 	}
 }
+
+func TestHealthStaleTrendSaysWhenLastRecorded(t *testing.T) {
+	// The daemon stopped 60 days ago: the trend is real but old.
+	db := healthDB(t, map[int]int{90: 880, 60: 877})
+	got, _ := runHealthT(t, macHealth, db, true, false, false)
+	last := testNow.AddDate(0, 0, -60).Format("02 Jan")
+	if !strings.HasSuffix(got, "≈ −0.30 %/month   (last recorded "+last+")\n") {
+		t.Errorf("got:\n%s", got)
+	}
+	js, _ := runHealthT(t, macHealth, db, true, true, false)
+	if !strings.Contains(js, `"last_day":"`+testNow.AddDate(0, 0, -60).Format("2006-01-02")+`"`) {
+		t.Errorf("JSON trend lacks last_day: %s", js)
+	}
+	// A trend that ends today carries no note.
+	fresh := healthDB(t, map[int]int{30: 880, 0: 877})
+	if got, _ := runHealthT(t, macHealth, fresh, true, false, false); strings.Contains(got, "last recorded") {
+		t.Errorf("fresh trend:\n%s", got)
+	}
+}
+
+func TestHealthDesignCapacityZeroWording(t *testing.T) {
+	h := macHealth
+	h.DesignMAh = hip(0)
+	got, _ := runHealthT(t, h, filepath.Join(t.TempDir(), "none.db"), false, false, false)
+	if !strings.Contains(got, "health         unknown   (DesignCapacity is 0)\n") {
+		t.Errorf("got:\n%s", got)
+	}
+}
