@@ -137,3 +137,36 @@ func TestOpenPathWithSpacesAndReadOnlyReopen(t *testing.T) {
 	}
 	ro.Close()
 }
+
+func TestHealthSinceSkipsIncompleteRowsAndOrdersByDay(t *testing.T) {
+	db, _ := openTemp(t)
+	ctx := context.Background()
+	rows := []struct {
+		day         string
+		raw, design any
+	}{
+		{"2026-06-01", 5500, 6249}, // before the window
+		{"2026-07-10", 5480, 6249},
+		{"2026-07-03", 5490, 6249}, // inserted out of order
+		{"2026-07-05", nil, 6249},  // no raw capacity that day
+		{"2026-07-06", 5485, nil},  // no design capacity
+	}
+	for _, r := range rows {
+		if err := db.Exec(ctx, `INSERT INTO health(day, raw_max_mah, design_mah) VALUES(?,?,?)`, r.day, r.raw, r.design); err != nil {
+			t.Fatal(err)
+		}
+	}
+	got, err := db.HealthSince(ctx, "2026-07-01")
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []HealthRow{{"2026-07-03", 5490, 6249}, {"2026-07-10", 5480, 6249}}
+	if len(got) != len(want) {
+		t.Fatalf("HealthSince = %+v, want %+v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Errorf("row %d = %+v, want %+v", i, got[i], want[i])
+		}
+	}
+}
