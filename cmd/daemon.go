@@ -41,7 +41,7 @@ var (
 	// that `brew upgrade` deletes.
 	executable = os.Executable
 	tickEvery  = time.Minute
-	wokeAt     = lastWake // when the Mac last woke from sleep, if known
+	wokeAt     = lastWake // when the Mac last slept and woke, if known
 )
 
 const (
@@ -142,13 +142,20 @@ func runInstall(ctx context.Context, out io.Writer) error {
 	}
 
 	ctl := newCtl()
-	if ctl.Loaded(ctx) {
+	wasLoaded := ctl.Loaded(ctx)
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if wasLoaded {
 		// Re-installing also repoints a plist at a moved binary.
 		if err := ctl.Bootout(ctx); err != nil {
 			return err
 		}
 	}
 	if err := ctl.Bootstrap(ctx, ap); err != nil {
+		if wasLoaded && errors.Is(err, context.Canceled) {
+			return fmt.Errorf("interrupted after stopping the old recorder; nothing is recording now, re-run 'batlog daemon install': %w", err)
+		}
 		return err // plist stays for inspection
 	}
 	fmt.Fprintln(out, "✓ batlog daemon installed: recording every 60 s, now and at every login")
@@ -199,6 +206,9 @@ func runUninstall(ctx context.Context, out io.Writer) error {
 	}
 	ctl := newCtl()
 	loaded := ctl.Loaded(ctx)
+	if err := ctx.Err(); err != nil {
+		return err // an interrupted `launchctl print` looks like "not loaded"
+	}
 	_, statErr := os.Stat(ap)
 	if !loaded && errors.Is(statErr, fs.ErrNotExist) {
 		fmt.Fprintln(out, "batlog daemon is not installed")
@@ -208,6 +218,9 @@ func runUninstall(ctx context.Context, out io.Writer) error {
 		if err := ctl.Bootout(ctx); err != nil {
 			return err
 		}
+	}
+	if err := ctx.Err(); err != nil {
+		return err
 	}
 	if err := os.Remove(ap); err != nil && !errors.Is(err, fs.ErrNotExist) {
 		return err
@@ -289,9 +302,12 @@ func collectDaemonState(ctx context.Context) (daemonState, error) {
 		}
 	}
 
-	if woke, ok := wokeAt(); ok && s.LastTickAgeS != nil {
+	// Grace after wake only for a recorder that was ticking until the Mac
+	// slept: its last tick is at most two minutes before the sleep.
+	if slept, woke, ok := wokeAt(); ok && s.LastTickAgeS != nil {
 		ago := now().Unix() - woke.Unix()
-		if ago >= 0 && ago < *s.LastTickAgeS {
+		lastTick := now().Unix() - *s.LastTickAgeS
+		if ago >= 0 && ago < *s.LastTickAgeS && lastTick >= slept.Unix()-120 {
 			s.wokeAgoS = &ago
 		}
 	}
@@ -432,7 +448,11 @@ func runRecorder(ctx context.Context, out io.Writer, once bool) error {
 }
 
 func runLogs(ctx context.Context, out io.Writer, follow bool) error {
-	lp, err := logPath()
+	var plistData []byte
+	if ap, err := agentPath(); err == nil {
+		plistData, _ = os.ReadFile(ap)
+	}
+	_, lp, err := daemonPaths(plistData)
 	if err != nil {
 		return err
 	}
@@ -461,9 +481,22 @@ func followLog(ctx context.Context, out io.Writer, path string, every time.Durat
 	}
 	defer f.Close()
 	var offset int64
+	pending := false
 	for {
-		if st, err := f.Stat(); err == nil && st.Size() < offset {
-			offset = resumeAfterTruncation(path)
+		if st, err := f.Stat(); err == nil && (st.Size() < offset || pending) {
+			data, err := os.ReadFile(path)
+			if err != nil {
+				return err
+			}
+			offset, pending = nextOffset(data, offset, pending)
+		}
+		if pending {
+			select {
+			case <-ctx.Done():
+				return nil
+			case <-time.After(every):
+			}
+			continue
 		}
 		if _, err := f.Seek(offset, io.SeekStart); err != nil {
 			return err
@@ -481,19 +514,25 @@ func followLog(ctx context.Context, out io.Writer, path string, every time.Durat
 	}
 }
 
-// resumeAfterTruncation is where to continue following a log that was cut
-// in place: just after the last truncation marker, so the kept tail, which
-// was already printed, is not printed again.
-func resumeAfterTruncation(path string) int64 {
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return 0
+// nextOffset decides where to keep following after the log may have been
+// cut in place. It returns offset unchanged when the file has not shrunk.
+// After TruncateLog it resumes just past the marker, so the kept tail, which
+// was already printed, is not printed again. A shrunk file with no marker
+// yet may be caught between Truncate(0) and the tail being written, so it
+// waits one poll (pending) before deciding someone else emptied the file
+// and starting from the top.
+func nextOffset(data []byte, offset int64, pending bool) (int64, bool) {
+	if int64(len(data)) >= offset && !pending {
+		return offset, false
 	}
 	marker := []byte(recorder.TruncatedMarker + "\n")
 	if i := bytes.LastIndex(data, marker); i >= 0 {
-		return int64(i + len(marker))
+		return int64(i + len(marker)), false
 	}
-	return 0
+	if !pending {
+		return offset, true
+	}
+	return 0, false
 }
 
 // tilde shortens paths under the home directory to ~/…
