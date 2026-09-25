@@ -41,8 +41,10 @@ check the exact arguments without touching launchd.
   run]`, `RunAtLoad`, `KeepAlive`, `ProcessType=Background`, stdout and
   stderr to the daemon log. `BATLOG_HOME` is passed through when set at
   install time, so the daemon writes where the installer read.
-- **install:** resolve `os.Executable` through symlinks; refuse a `go run`
-  build path. Create data and log directories, create and migrate the
+- **install:** use `os.Executable` as invoked, not resolved through symlinks,
+  so the plist names Homebrew's stable link rather than the versioned Cellar
+  path `brew upgrade` deletes; refuse a binary that resolves into a `go run`
+  build directory. Create data and log directories, create and migrate the
   database, write the plist, `bootout` if loaded, `bootstrap` with up to three
   retries one second apart (launchd often reports I/O error while a previous
   instance is still tearing down). A final failure exits 1 with launchctl's

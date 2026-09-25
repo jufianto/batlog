@@ -408,3 +408,39 @@ func TestRunUnderLaunchdDoesNotWarnAfterRestart(t *testing.T) {
 		t.Errorf("launchd restart must not warn:\n%s", out)
 	}
 }
+
+func TestInstallKeepsTheSymlinkPath(t *testing.T) {
+	// Homebrew runs /opt/homebrew/bin/batlog → ../Cellar/batlog/1.0/bin/batlog.
+	// The plist must name the stable link: `brew upgrade` deletes the
+	// versioned target, and launchd would have nothing to start.
+	e := stubDaemon(t)
+	cellar := filepath.Join(e.dir, "Cellar", "batlog", "1.0", "bin", "batlog")
+	link := filepath.Join(e.dir, "brewbin", "batlog")
+	os.MkdirAll(filepath.Dir(cellar), 0o755)
+	os.MkdirAll(filepath.Dir(link), 0o755)
+	os.WriteFile(cellar, []byte("#!"), 0o755)
+	if err := os.Symlink(cellar, link); err != nil {
+		t.Fatal(err)
+	}
+	executable = func() (string, error) { return link, nil }
+	if _, err := run(t, "daemon", "install"); err != nil {
+		t.Fatal(err)
+	}
+	data, _ := os.ReadFile(e.agent)
+	if bin, _ := launchd.Program(data); bin != link {
+		t.Errorf("plist runs %q, want the symlink %q", bin, link)
+	}
+}
+
+func TestInstallRefusesGoRunBinaryBehindSymlink(t *testing.T) {
+	e := stubDaemon(t)
+	target := filepath.Join(e.dir, "go-build123", "exe", "batlog")
+	link := filepath.Join(e.dir, "batlog")
+	os.MkdirAll(filepath.Dir(target), 0o755)
+	os.WriteFile(target, []byte("#!"), 0o755)
+	os.Symlink(target, link)
+	executable = func() (string, error) { return link, nil }
+	if _, err := run(t, "daemon", "install"); err == nil || !strings.Contains(err.Error(), "go run") {
+		t.Errorf("err = %v, want refusal of a go run build behind a link", err)
+	}
+}
