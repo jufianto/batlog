@@ -24,11 +24,22 @@ type fakeCtl struct {
 	loaded       bool
 	bootstrapErr error
 	calls        []string
+	onLoaded     func() // e.g. simulate Ctrl-C arriving during launchctl print
+	onBootout    func()
 }
 
-func (f *fakeCtl) Loaded(context.Context) bool { f.calls = append(f.calls, "print"); return f.loaded }
+func (f *fakeCtl) Loaded(ctx context.Context) bool {
+	f.calls = append(f.calls, "print")
+	if f.onLoaded != nil {
+		f.onLoaded()
+	}
+	return f.loaded && ctx.Err() == nil // a killed launchctl looks like "not loaded"
+}
 func (f *fakeCtl) Bootstrap(ctx context.Context, p string) error {
 	f.calls = append(f.calls, "bootstrap "+filepath.Base(p))
+	if ctx.Err() != nil {
+		return ctx.Err()
+	}
 	if f.bootstrapErr != nil {
 		return f.bootstrapErr
 	}
@@ -37,6 +48,9 @@ func (f *fakeCtl) Bootstrap(ctx context.Context, p string) error {
 }
 func (f *fakeCtl) Bootout(context.Context) error {
 	f.calls = append(f.calls, "bootout")
+	if f.onBootout != nil {
+		f.onBootout()
+	}
 	f.loaded = false
 	return nil
 }
@@ -58,7 +72,7 @@ func stubDaemon(t *testing.T) *daemonEnv {
 	}
 	stubStatus(t, battery.Snapshot{Percent: 67, Watts: 8.4, HasWatts: true}, e.db)
 	oldAgent, oldLog, oldCtl, oldExe, oldHome, oldWoke := agentPath, logPath, newCtl, executable, homeDir, wokeAt
-	wokeAt = func() (time.Time, bool) { return time.Time{}, false }
+	wokeAt = func() (time.Time, time.Time, bool) { return time.Time{}, time.Time{}, false }
 	agentPath = func() (string, error) { return e.agent, nil }
 	logPath = func() (string, error) { return e.log, nil }
 	newCtl = func() daemonCtl { return e.ctl }
@@ -557,7 +571,10 @@ func TestStatusJustAfterWakeIsRunning(t *testing.T) {
 	e := stubDaemon(t)
 	installedAgent(t, e, 24*time.Hour)
 	e.seedTicks(t, testNow.Unix()-8*3600)
-	wokeAt = func() (time.Time, bool) { return testNow.Add(-20 * time.Second), true }
+	// Slept 8 h ago, right after the last tick; woke 20 s ago.
+	wokeAt = func() (time.Time, time.Time, bool) {
+		return testNow.Add(-8*time.Hour + 30*time.Second), testNow.Add(-20 * time.Second), true
+	}
 	out, _ := run(t, "daemon", "status")
 	if !strings.HasPrefix(out, "● batlog daemon: running   (Mac woke 20 s ago; next tick within a minute)\n") {
 		t.Errorf("status:\n%s", out)
@@ -566,7 +583,9 @@ func TestStatusJustAfterWakeIsRunning(t *testing.T) {
 		t.Errorf("no hint after a wake:\n%s", out)
 	}
 	// Woke long ago and still no tick since: that is dead.
-	wokeAt = func() (time.Time, bool) { return testNow.Add(-7 * time.Hour), true }
+	wokeAt = func() (time.Time, time.Time, bool) {
+		return testNow.Add(-7*time.Hour - time.Minute), testNow.Add(-7 * time.Hour), true
+	}
 	if out, _ := run(t, "daemon", "status"); !strings.HasPrefix(out, "● batlog daemon: dead") {
 		t.Errorf("woke 7 h ago, last tick 8 h ago:\n%s", out)
 	}
@@ -617,5 +636,100 @@ func waitFor(t *testing.T, b *syncBuffer, s string) {
 			t.Fatalf("timed out waiting for %q; have %q", s, b.String())
 		}
 		time.Sleep(2 * time.Millisecond)
+	}
+}
+
+func TestStatusAfterWakeStillDeadIfTicksStoppedBeforeSleep(t *testing.T) {
+	// Ticks stopped 3 days ago; the Mac slept 8 h ago and woke 30 s ago.
+	// The wake grace is only for a recorder that was alive until sleep.
+	e := stubDaemon(t)
+	installedAgent(t, e, 30*24*time.Hour)
+	e.seedTicks(t, testNow.Unix()-3*86400)
+	wokeAt = func() (time.Time, time.Time, bool) {
+		return testNow.Add(-8 * time.Hour), testNow.Add(-30 * time.Second), true
+	}
+	if out, _ := run(t, "daemon", "status"); !strings.HasPrefix(out, "● batlog daemon: dead") {
+		t.Errorf("status:\n%s", out)
+	}
+}
+
+func TestUninstallInterruptedDuringPrintKeepsThePlist(t *testing.T) {
+	// Ctrl-C kills `launchctl print`, which then looks like "not loaded".
+	// Uninstall must not conclude the agent is gone and delete its plist.
+	e := stubDaemon(t)
+	installedAgent(t, e, time.Hour)
+	ctx, cancel := context.WithCancel(context.Background())
+	e.ctl.onLoaded = cancel
+	out, err := runCtx(t, ctx, "daemon", "uninstall")
+	if !errors.Is(err, context.Canceled) {
+		t.Errorf("err = %v, want context.Canceled", err)
+	}
+	if _, err := os.Stat(e.agent); err != nil {
+		t.Error("plist deleted after an interrupted uninstall")
+	}
+	if strings.Contains(out, "removed") {
+		t.Errorf("claims success:\n%s", out)
+	}
+}
+
+func TestInstallInterruptedAfterBootoutSaysToRerun(t *testing.T) {
+	e := stubDaemon(t)
+	e.ctl.loaded = true
+	ctx, cancel := context.WithCancel(context.Background())
+	e.ctl.onBootout = cancel
+	_, err := runCtx(t, ctx, "daemon", "install")
+	if !errors.Is(err, context.Canceled) || !strings.Contains(err.Error(), "re-run 'batlog daemon install'") {
+		t.Errorf("err = %v, want an interruption that says to re-run install", err)
+	}
+}
+
+func TestLogsFollowsThePlistsBatlogHome(t *testing.T) {
+	e := stubDaemon(t)
+	elsewhere := filepath.Join(e.dir, "elsewhere")
+	os.MkdirAll(elsewhere, 0o755)
+	os.WriteFile(filepath.Join(elsewhere, "daemon.log"), []byte("from the daemon\n"), 0o644)
+	os.MkdirAll(filepath.Dir(e.agent), 0o755)
+	data, _ := launchd.Plist("dev.jufi.batlog", "/b", filepath.Join(elsewhere, "daemon.log"), map[string]string{"BATLOG_HOME": elsewhere})
+	os.WriteFile(e.agent, data, 0o644)
+	if out, _ := run(t, "daemon", "logs"); out != "from the daemon\n" {
+		t.Errorf("logs = %q", out)
+	}
+}
+
+func TestFollowOffsetAfterShrink(t *testing.T) {
+	marked := []byte("kept\n" + recorder.TruncatedMarker + "\nnew\n")
+	cases := []struct {
+		name        string
+		data        []byte
+		offset      int64
+		pending     bool
+		want        int64
+		wantPending bool
+	}{
+		{"grew normally", []byte("abcdef"), 3, false, 3, false},
+		{"cut with marker", marked, 1000, false, int64(len(marked) - len("new\n")), false},
+		// Polled between Truncate(0) and the write of the kept tail: wait.
+		{"cut, marker not written yet", []byte{}, 1000, false, 1000, true},
+		// Still no marker a poll later: someone else emptied it; start over.
+		{"cut by hand", []byte("x\n"), 1000, true, 0, false},
+	}
+	for _, c := range cases {
+		got, pending := nextOffset(c.data, c.offset, c.pending)
+		if got != c.want || pending != c.wantPending {
+			t.Errorf("%s: nextOffset = %d,%v want %d,%v", c.name, got, pending, c.want, c.wantPending)
+		}
+	}
+}
+
+func TestUninstallInterruptedDoesNotClaimNotInstalled(t *testing.T) {
+	// Plist already gone but the agent may still be loaded: an interrupted
+	// `launchctl print` must not turn into "not installed", exit 0.
+	e := stubDaemon(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	e.ctl.loaded = true
+	e.ctl.onLoaded = cancel
+	out, err := runCtx(t, ctx, "daemon", "uninstall")
+	if !errors.Is(err, context.Canceled) || strings.Contains(out, "not installed") {
+		t.Errorf("err=%v out=%q, want an interruption, not 'not installed'", err, out)
 	}
 }

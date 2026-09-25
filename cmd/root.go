@@ -61,7 +61,7 @@ func Execute() {
 	defer stop()
 	if err := rootCmd.ExecuteContext(ctx); err != nil {
 		stop()
-		if errors.Is(err, context.Canceled) {
+		if err == context.Canceled { // a bare Ctrl-C; wrapped ones carry advice
 			fmt.Fprintln(os.Stderr, "batlog: interrupted")
 			os.Exit(1)
 		}
