@@ -45,14 +45,14 @@ func runStatus(ctx context.Context, out, errw io.Writer, asJSON bool) error {
 
 	var samples []store.Sample
 	var energy []store.AppEnergy
-	dbFound := false
+	dbBroken := false
 	if p, err := dbPath(); err == nil && store.Exists(p) {
-		dbFound = true
 		// A database that fails to open is a warning, never a reason to hide
 		// the live fields. status never creates the database.
 		db, err := store.Open(p, true)
 		if err != nil {
 			fmt.Fprintf(errw, "warning: %v\n", err)
+			dbBroken = true
 		} else {
 			defer db.Close()
 			if samples, err = db.SamplesSince(ctx, since); err != nil {
@@ -70,7 +70,7 @@ func runStatus(ctx context.Context, out, errw io.Writer, asJSON bool) error {
 	if asJSON {
 		return writeStatusJSON(out, r)
 	}
-	renderStatus(out, r, dbFound)
+	renderStatus(out, r, dbBroken)
 	return nil
 }
 
@@ -110,7 +110,7 @@ func writeStatusJSON(out io.Writer, r status.Report) error {
 	return enc.Encode(j)
 }
 
-func renderStatus(w io.Writer, r status.Report, dbFound bool) {
+func renderStatus(w io.Writer, r status.Report, dbBroken bool) {
 	icon, source, state := "🔋", "on battery", "discharging"
 	if r.OnAC {
 		icon, source = "⚡", "AC"
@@ -154,7 +154,9 @@ func renderStatus(w io.Writer, r status.Report, dbFound bool) {
 	if r.Worst != nil {
 		fmt.Fprintf(w, "worst now   %s  (%.0f%% of energy)\n", r.Worst.App, r.Worst.Share*100)
 	}
-	if !r.HasData && !dbFound {
+	// A database that exists but cannot be opened is not fixed by
+	// installing the daemon; the warning on stderr already says what is wrong.
+	if !r.HasData && !dbBroken {
 		fmt.Fprintln(w, "tip: run 'batlog daemon install' for drain analysis")
 	}
 }

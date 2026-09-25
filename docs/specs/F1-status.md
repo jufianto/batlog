@@ -61,7 +61,7 @@ JSON (stable):
 
 | Case | Behaviour |
 |---|---|
-| Daemon never installed / no recent samples | Live fields only, plus `tip: run 'batlog daemon install' for drain analysis` when no database exists |
+| Daemon never installed / no recent samples | Live fields only, plus `tip: run 'batlog daemon install' for drain analysis` unless the database exists but cannot be opened |
 | Just unplugged (< 3 samples on battery) | Omit drain; show `drain: collecting…` |
 | Sleep gap inside the 10-min window | Use post-wake samples only; if < 3, omit |
 | `TimeRemaining` = 65535 | Omit macOS estimate |
