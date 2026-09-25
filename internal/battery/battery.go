@@ -63,7 +63,7 @@ func Parse(data []byte) (Snapshot, error) {
 	}
 	var entries []map[string]any
 	if _, err := plist.Unmarshal(data, &entries); err != nil {
-		return Snapshot{}, fmt.Errorf("%w: %v", ErrUnrecognised, err)
+		return Snapshot{}, ErrUnrecognised
 	}
 	if len(entries) == 0 {
 		return Snapshot{}, ErrNoBattery

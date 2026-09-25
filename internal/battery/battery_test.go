@@ -171,3 +171,10 @@ func fmtHealth(h Health) string {
 	return fmt.Sprintf("{cycles:%v design:%v raw:%v nominal:%v temp:%v volt:%v fail:%v}",
 		i(h.Cycles), i(h.DesignMAh), i(h.RawMaxMAh), i(h.NominalMAh), f(h.TempC), f(h.VoltageV), i(h.FailureStatus))
 }
+
+func TestUnrecognisedErrorIsTheSpecsExactText(t *testing.T) {
+	_, err := Parse([]byte("not a plist"))
+	if err == nil || err.Error() != "cannot read battery (ioreg output not recognised)" {
+		t.Errorf("error = %q", err)
+	}
+}
