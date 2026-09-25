@@ -3,6 +3,7 @@
 package launchd
 
 import (
+	"context"
 	"fmt"
 	"os/exec"
 	"strconv"
@@ -68,51 +69,69 @@ func Env(data []byte) (map[string]string, error) {
 // "5: Input/output error" while the previous instance is still going away.
 const bootstrapAttempts = 3
 
-// Client runs launchctl for one agent in the user's GUI domain.
+// Client runs launchctl for one agent in the user's GUI domain. Every call
+// takes a context so Ctrl-C stops an install between retries.
 type Client struct {
 	UID   int
 	Label string
-	Run   func(args ...string) ([]byte, error) // defaults to launchctl
-	Sleep func(time.Duration)                  // defaults to time.Sleep
+	Run   func(ctx context.Context, args ...string) ([]byte, error)
+	Sleep func(ctx context.Context, d time.Duration) error
 }
 
 // New returns a client that runs the real launchctl.
 func New(uid int, label string) Client {
-	return Client{UID: uid, Label: label, Run: runLaunchctl, Sleep: time.Sleep}
+	return Client{UID: uid, Label: label, Run: runLaunchctl, Sleep: sleep}
 }
 
-func runLaunchctl(args ...string) ([]byte, error) {
-	return exec.Command("launchctl", args...).CombinedOutput()
+func runLaunchctl(ctx context.Context, args ...string) ([]byte, error) {
+	return exec.CommandContext(ctx, "launchctl", args...).CombinedOutput()
+}
+
+func sleep(ctx context.Context, d time.Duration) error {
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-time.After(d):
+		return nil
+	}
 }
 
 func (c Client) domain() string  { return "gui/" + strconv.Itoa(c.UID) }
 func (c Client) service() string { return c.domain() + "/" + c.Label }
 
 // Loaded reports whether launchd knows the agent.
-func (c Client) Loaded() bool {
-	_, err := c.Run("print", c.service())
+func (c Client) Loaded(ctx context.Context) bool {
+	_, err := c.Run(ctx, "print", c.service())
 	return err == nil
 }
 
 // Bootstrap loads the plist, retrying briefly. The error carries
-// launchctl's own message.
-func (c Client) Bootstrap(plistPath string) error {
+// launchctl's own message, or the context's error if interrupted.
+func (c Client) Bootstrap(ctx context.Context, plistPath string) error {
 	var out []byte
 	var err error
 	for i := 0; i < bootstrapAttempts; i++ {
 		if i > 0 {
-			c.Sleep(time.Second)
+			if err := c.Sleep(ctx, time.Second); err != nil {
+				return err
+			}
 		}
-		if out, err = c.Run("bootstrap", c.domain(), plistPath); err == nil {
+		if out, err = c.Run(ctx, "bootstrap", c.domain(), plistPath); err == nil {
 			return nil
+		}
+		if ctx.Err() != nil {
+			return ctx.Err()
 		}
 	}
 	return fmt.Errorf("launchctl bootstrap: %s (%v)", strings.TrimSpace(string(out)), err)
 }
 
 // Bootout stops and unloads the agent.
-func (c Client) Bootout() error {
-	if out, err := c.Run("bootout", c.service()); err != nil {
+func (c Client) Bootout(ctx context.Context) error {
+	if out, err := c.Run(ctx, "bootout", c.service()); err != nil {
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
 		return fmt.Errorf("launchctl bootout: %s (%v)", strings.TrimSpace(string(out)), err)
 	}
 	return nil

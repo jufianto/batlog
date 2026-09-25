@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -24,9 +25,9 @@ import (
 
 // daemonCtl is the part of launchd.Client the commands use.
 type daemonCtl interface {
-	Loaded() bool
-	Bootstrap(plistPath string) error
-	Bootout() error
+	Loaded(ctx context.Context) bool
+	Bootstrap(ctx context.Context, plistPath string) error
+	Bootout(ctx context.Context) error
 }
 
 // Swapped by tests so nothing touches the real launchd or ~/Library.
@@ -40,6 +41,7 @@ var (
 	// that `brew upgrade` deletes.
 	executable = os.Executable
 	tickEvery  = time.Minute
+	wokeAt     = lastWake // when the Mac last woke from sleep, if known
 )
 
 const (
@@ -63,10 +65,10 @@ var daemonCmd = &cobra.Command{
 func init() {
 	sub := []*cobra.Command{
 		{Use: "install", Short: "Start recording every 60 s, now and at every login", RunE: func(cmd *cobra.Command, _ []string) error {
-			return runInstall(cmd.OutOrStdout())
+			return runInstall(cmd.Context(), cmd.OutOrStdout())
 		}},
 		{Use: "uninstall", Short: "Stop recording; your data is kept", RunE: func(cmd *cobra.Command, _ []string) error {
-			return runUninstall(cmd.OutOrStdout())
+			return runUninstall(cmd.Context(), cmd.OutOrStdout())
 		}},
 		{Use: "status", Short: "Is the recorder installed, loaded and writing?", RunE: func(cmd *cobra.Command, _ []string) error {
 			return runDaemonStatus(cmd.Context(), cmd.OutOrStdout(), jsonOut)
@@ -87,7 +89,10 @@ func init() {
 	rootCmd.AddCommand(daemonCmd)
 }
 
-func runInstall(out io.Writer) error {
+func runInstall(ctx context.Context, out io.Writer) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	bin, err := executable()
 	if err != nil {
 		return fmt.Errorf("find batlog binary: %w", err)
@@ -137,13 +142,13 @@ func runInstall(out io.Writer) error {
 	}
 
 	ctl := newCtl()
-	if ctl.Loaded() {
+	if ctl.Loaded(ctx) {
 		// Re-installing also repoints a plist at a moved binary.
-		if err := ctl.Bootout(); err != nil {
+		if err := ctl.Bootout(ctx); err != nil {
 			return err
 		}
 	}
-	if err := ctl.Bootstrap(ap); err != nil {
+	if err := ctl.Bootstrap(ctx, ap); err != nil {
 		return err // plist stays for inspection
 	}
 	fmt.Fprintln(out, "✓ batlog daemon installed: recording every 60 s, now and at every login")
@@ -182,7 +187,7 @@ func daemonPaths(plistData []byte) (db, logFile string, err error) {
 	return db, logFile, err
 }
 
-func runUninstall(out io.Writer) error {
+func runUninstall(ctx context.Context, out io.Writer) error {
 	ap, err := agentPath()
 	if err != nil {
 		return err
@@ -193,14 +198,14 @@ func runUninstall(out io.Writer) error {
 		return err
 	}
 	ctl := newCtl()
-	loaded := ctl.Loaded()
+	loaded := ctl.Loaded(ctx)
 	_, statErr := os.Stat(ap)
 	if !loaded && errors.Is(statErr, fs.ErrNotExist) {
 		fmt.Fprintln(out, "batlog daemon is not installed")
 		return nil
 	}
 	if loaded {
-		if err := ctl.Bootout(); err != nil {
+		if err := ctl.Bootout(ctx); err != nil {
 			return err
 		}
 	}
@@ -229,6 +234,9 @@ type daemonState struct {
 	Samples       int     `json:"samples"`
 	OldestTS      *int64  `json:"oldest_ts"`
 	Log           string  `json:"log"`
+
+	plistAgeS *int64 // since install (plist mtime)
+	wokeAgoS  *int64 // since the Mac woke, when that came after the last tick
 }
 
 func collectDaemonState(ctx context.Context) (daemonState, error) {
@@ -246,13 +254,17 @@ func collectDaemonState(ctx context.Context) (daemonState, error) {
 	}
 	if readErr == nil {
 		s.Installed = true
+		if st, err := os.Stat(s.Plist); err == nil {
+			age := now().Unix() - st.ModTime().Unix()
+			s.plistAgeS = &age
+		}
 		if bin, err := launchd.Program(data); err == nil {
 			s.Binary = &bin
 			_, err := os.Stat(bin)
 			s.BinaryExists = err == nil
 		}
 	}
-	s.Loaded = newCtl().Loaded()
+	s.Loaded = newCtl().Loaded(ctx)
 
 	if st, err := os.Stat(s.Database); err == nil {
 		size := st.Size()
@@ -277,6 +289,13 @@ func collectDaemonState(ctx context.Context) (daemonState, error) {
 		}
 	}
 
+	if woke, ok := wokeAt(); ok && s.LastTickAgeS != nil {
+		ago := now().Unix() - woke.Unix()
+		if ago >= 0 && ago < *s.LastTickAgeS {
+			s.wokeAgoS = &ago
+		}
+	}
+
 	switch {
 	case !s.Installed:
 		s.State = "not_installed"
@@ -284,9 +303,13 @@ func collectDaemonState(ctx context.Context) (daemonState, error) {
 		s.State = "dead"
 	case !s.Loaded:
 		s.State = "not_loaded"
-	case s.LastTickAgeS == nil:
+	case s.LastTickAgeS == nil && (s.plistAgeS == nil || *s.plistAgeS < 120):
 		s.State = "waiting"
-	case *s.LastTickAgeS < 120:
+	case s.LastTickAgeS == nil:
+		s.State = "dead" // installed minutes ago and not one tick since
+	case *s.LastTickAgeS < 120, s.wokeAgoS != nil && *s.wokeAgoS < 120:
+		// Go's timers stop during sleep: the first tick after wake can be
+		// up to a minute late without anything being wrong.
 		s.State = "running"
 	case *s.LastTickAgeS <= 600:
 		s.State = "stale"
@@ -322,6 +345,11 @@ func runDaemonStatus(ctx context.Context, out io.Writer, asJSON bool) error {
 		hint = "re-run 'batlog daemon install'"
 	case s.State == "waiting":
 		fmt.Fprintln(out, "● batlog daemon: waiting for the first tick")
+	case s.State == "dead" && s.LastTickAgeS == nil:
+		fmt.Fprintf(out, "● batlog daemon: dead   (no tick since install %s)\n", fmtAge(*s.plistAgeS))
+		hint = "check 'batlog daemon logs'"
+	case s.State == "running" && s.wokeAgoS != nil && *s.LastTickAgeS >= 120:
+		fmt.Fprintf(out, "● batlog daemon: running   (Mac woke %s; next tick within a minute)\n", fmtAge(*s.wokeAgoS))
 	default:
 		fmt.Fprintf(out, "● batlog daemon: %s%s\n", s.State, age)
 		if s.State == "dead" {
@@ -435,7 +463,7 @@ func followLog(ctx context.Context, out io.Writer, path string, every time.Durat
 	var offset int64
 	for {
 		if st, err := f.Stat(); err == nil && st.Size() < offset {
-			offset = 0
+			offset = resumeAfterTruncation(path)
 		}
 		if _, err := f.Seek(offset, io.SeekStart); err != nil {
 			return err
@@ -451,6 +479,21 @@ func followLog(ctx context.Context, out io.Writer, path string, every time.Durat
 		case <-time.After(every):
 		}
 	}
+}
+
+// resumeAfterTruncation is where to continue following a log that was cut
+// in place: just after the last truncation marker, so the kept tail, which
+// was already printed, is not printed again.
+func resumeAfterTruncation(path string) int64 {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return 0
+	}
+	marker := []byte(recorder.TruncatedMarker + "\n")
+	if i := bytes.LastIndex(data, marker); i >= 0 {
+		return int64(i + len(marker))
+	}
+	return 0
 }
 
 // tilde shortens paths under the home directory to ~/…
