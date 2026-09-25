@@ -8,7 +8,7 @@ import (
 	"math"
 	"os"
 	"strconv"
-	"strings"
+	"time"
 
 	"github.com/spf13/cobra"
 
@@ -48,7 +48,7 @@ func runHealth(ctx context.Context, out, errw io.Writer, withTrend, asJSON, colo
 	if asJSON {
 		return writeHealthJSON(out, r, trend)
 	}
-	renderHealth(out, r, withTrend, trend, span, color)
+	renderHealth(out, r, withTrend, trend, span, color, now())
 	return nil
 }
 
@@ -91,6 +91,7 @@ type trendJSON struct {
 	ToPct       float64 `json:"to_pct"`
 	PctPerMonth float64 `json:"pct_per_month"`
 	Days        int     `json:"days"`
+	LastDay     string  `json:"last_day"`
 }
 
 func writeHealthJSON(out io.Writer, r health.Report, t *health.TrendResult) error {
@@ -106,19 +107,22 @@ func writeHealthJSON(out io.Writer, r health.Report, t *health.TrendResult) erro
 		Condition:      r.Condition,
 	}
 	if t != nil {
-		j.Trend = &trendJSON{FromPct: t.FromPct, ToPct: t.ToPct, PctPerMonth: t.PctPerMonth, Days: t.Days}
+		j.Trend = &trendJSON{FromPct: t.FromPct, ToPct: t.ToPct, PctPerMonth: t.PctPerMonth, Days: t.Days, LastDay: t.LastDay}
 	}
 	return json.NewEncoder(out).Encode(j)
 }
 
-func renderHealth(w io.Writer, r health.Report, withTrend bool, t *health.TrendResult, span int, color bool) {
+// staleTrendDays: a trend whose newest row is older than this says so.
+const staleTrendDays = 3
+
+func renderHealth(w io.Writer, r health.Report, withTrend bool, t *health.TrendResult, span int, color bool, today time.Time) {
 	line := func(label, value string) { fmt.Fprintf(w, "%-15s%s\n", label, value) }
 
 	fmt.Fprintln(w, "🔎 Battery health")
 	if r.HealthPct != nil {
 		line("health", fmt.Sprintf("%.1f%%   (%s / %s mAh design)", *r.HealthPct, thousands(*r.RawMaxMAh), thousands(*r.DesignMAh)))
 	} else {
-		line("health", fmt.Sprintf("unknown   (ioreg has no %s)", strings.Join(r.MissingKeys, " or ")))
+		line("health", fmt.Sprintf("unknown   (%s)", r.HealthNote))
 	}
 	if r.AppleHealthPct != nil {
 		line("Apple reports", fmt.Sprintf("%.1f%%   (smoothed)", *r.AppleHealthPct))
@@ -151,7 +155,12 @@ func renderHealth(w io.Writer, r health.Report, withTrend bool, t *health.TrendR
 		fmt.Fprintf(w, "trend: not enough history yet (have %d days, need %d)\n", span, health.MinSpanDays)
 		return
 	}
-	fmt.Fprintf(w, "trend (%d days)   %.1f%% → %.1f%%   ≈ %s %%/month\n", t.Days, t.FromPct, t.ToPct, signed(t.PctPerMonth))
+	stale := ""
+	if last, err := time.ParseInLocation("2006-01-02", t.LastDay, today.Location()); err == nil &&
+		today.Sub(last) > staleTrendDays*24*time.Hour {
+		stale = "   (last recorded " + last.Format("02 Jan") + ")"
+	}
+	fmt.Fprintf(w, "trend (%d days)   %.1f%% → %.1f%%   ≈ %s %%/month%s\n", t.Days, t.FromPct, t.ToPct, signed(t.PctPerMonth), stale)
 }
 
 // signed prints a rate with a typographic minus, or a plus for growth.

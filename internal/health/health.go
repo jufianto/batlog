@@ -3,7 +3,10 @@
 package health
 
 import (
+	"fmt"
 	"math"
+	"sort"
+	"strings"
 	"time"
 
 	"github.com/jufianto/batlog/internal/battery"
@@ -32,7 +35,8 @@ type Report struct {
 	Condition      *string // "Normal" or "Service recommended"; nil without the key
 	FailureStatus  *int
 	NeedsService   bool
-	MissingKeys    []string // capacity keys that stopped HealthPct being computed
+	MissingKeys    []string // capacity keys ioreg did not report
+	HealthNote     string   // why HealthPct is nil, e.g. "DesignCapacity is 0"
 }
 
 // TrendResult is the health change over the window.
@@ -41,6 +45,7 @@ type TrendResult struct {
 	ToPct       float64
 	PctPerMonth float64
 	Days        int
+	LastDay     string // newest row used, YYYY-MM-DD
 }
 
 // Build computes the current-health part of the report.
@@ -57,10 +62,18 @@ func Build(h battery.Health) Report {
 	if h.RawMaxMAh == nil {
 		r.MissingKeys = append(r.MissingKeys, "AppleRawMaxCapacity")
 	}
-	if h.DesignMAh == nil || *h.DesignMAh <= 0 {
+	if h.DesignMAh == nil {
 		r.MissingKeys = append(r.MissingKeys, "DesignCapacity")
 	}
-	if len(r.MissingKeys) == 0 {
+	var notes []string
+	if len(r.MissingKeys) > 0 {
+		notes = append(notes, "ioreg has no "+strings.Join(r.MissingKeys, " or "))
+	}
+	if h.DesignMAh != nil && *h.DesignMAh <= 0 {
+		notes = append(notes, fmt.Sprintf("DesignCapacity is %d", *h.DesignMAh))
+	}
+	r.HealthNote = strings.Join(notes, "; ")
+	if len(notes) == 0 {
 		r.HealthPct = pct(*h.RawMaxMAh, *h.DesignMAh)
 	}
 	if h.NominalMAh != nil && h.DesignMAh != nil && *h.DesignMAh > 0 {
@@ -85,27 +98,33 @@ func pct(num, den int) *float64 {
 // nil unless there are at least two rows spanning MinSpanDays; spanDays is
 // always the span between the first and last row, for the "have N days"
 // message.
-func Trend(rows []store.HealthRow) (trend *TrendResult, spanDays int) {
-	if len(rows) < 2 {
+func Trend(all []store.HealthRow) (trend *TrendResult, spanDays int) {
+	// Drop rows whose day does not parse before choosing the ends, so one
+	// bad row cannot hide months of good ones.
+	type point struct {
+		day time.Time
+		row store.HealthRow
+	}
+	var pts []point
+	for _, r := range all {
+		if d, err := time.Parse(dayLayout, r.Day); err == nil && r.DesignMAh > 0 {
+			pts = append(pts, point{d, r})
+		}
+	}
+	sort.SliceStable(pts, func(i, j int) bool { return pts[i].day.Before(pts[j].day) })
+	if len(pts) < 2 {
 		return nil, 0
 	}
-	first, err1 := time.Parse(dayLayout, rows[0].Day)
-	last, err2 := time.Parse(dayLayout, rows[len(rows)-1].Day)
-	if err1 != nil || err2 != nil {
-		return nil, 0
-	}
-	spanDays = int(last.Sub(first).Hours() / 24)
+	first, last := pts[0], pts[len(pts)-1]
+	spanDays = int(last.day.Sub(first.day).Hours() / 24)
 	if spanDays < MinSpanDays {
 		return nil, spanDays
 	}
 
 	var n, sx, sy, sxx, sxy float64
-	for _, r := range rows {
-		d, err := time.Parse(dayLayout, r.Day)
-		if err != nil {
-			continue
-		}
-		x := d.Sub(first).Hours() / 24
+	for _, p := range pts {
+		r := p.row
+		x := p.day.Sub(first.day).Hours() / 24
 		y := float64(r.RawMaxMAh) * 100 / float64(r.DesignMAh)
 		n++
 		sx += x
@@ -121,10 +140,11 @@ func Trend(rows []store.HealthRow) (trend *TrendResult, spanDays int) {
 		perMonth = 0 // normalise -0 so output never shows "-0.00"
 	}
 	return &TrendResult{
-		FromPct:     *pct(rows[0].RawMaxMAh, rows[0].DesignMAh),
-		ToPct:       *pct(rows[len(rows)-1].RawMaxMAh, rows[len(rows)-1].DesignMAh),
+		FromPct:     *pct(first.row.RawMaxMAh, first.row.DesignMAh),
+		ToPct:       *pct(last.row.RawMaxMAh, last.row.DesignMAh),
 		PctPerMonth: perMonth,
 		Days:        spanDays,
+		LastDay:     last.row.Day,
 	}, spanDays
 }
 
