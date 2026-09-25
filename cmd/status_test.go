@@ -221,3 +221,24 @@ func TestFmtDuration(t *testing.T) {
 		}
 	}
 }
+
+func TestStatusTipAfterUninstallKeptTheData(t *testing.T) {
+	// uninstall keeps the database; with nothing recording, the tip is
+	// exactly the right advice. Only a broken database suppresses it.
+	path := filepath.Join(t.TempDir(), "batlog.db")
+	db, err := store.Open(path, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	db.Migrate(context.Background())
+	db.Exec(context.Background(), `INSERT INTO samples(ts,pct,on_ac,charging) VALUES(?,60,0,0)`, testNow.Unix()-86400)
+	db.Close()
+	stubStatus(t, battery.Snapshot{Percent: 60}, path)
+	var out, errw bytes.Buffer
+	if err := runStatus(context.Background(), &out, &errw, false); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out.String(), "tip: run 'batlog daemon install' for drain analysis") {
+		t.Errorf("no recent samples in a healthy database: want the tip\n%s", out.String())
+	}
+}
