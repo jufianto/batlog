@@ -250,3 +250,29 @@ func TestTruncateLogLeavesAMarker(t *testing.T) {
 		t.Errorf("after cut: %q, want the kept tail then the marker line", got)
 	}
 }
+
+func TestRunRecordsItsStart(t *testing.T) {
+	e := newEnv(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	go func() { done <- e.rec.Run(ctx, time.Hour) }()
+	deadline := time.Now().Add(3 * time.Second)
+	for {
+		if n, _, _ := e.db.SampleStats(context.Background()); n >= 1 {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("no first tick")
+		}
+		time.Sleep(time.Millisecond)
+	}
+	cancel()
+	<-done
+	starts, err := e.db.RunStartsBetween(context.Background(), 0, 1<<62)
+	if err != nil || len(starts) != 1 {
+		t.Fatalf("run starts = %v, %v; want exactly one", starts, err)
+	}
+	if _, oldest, _ := e.db.SampleStats(context.Background()); starts[0] > oldest {
+		t.Errorf("start %d recorded after the first tick %d", starts[0], oldest)
+	}
+}

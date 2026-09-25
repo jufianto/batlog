@@ -161,7 +161,7 @@ func TestInstallWritesPlistDatabaseAndBootstraps(t *testing.T) {
 	}
 	v, _, _ := db.Meta(context.Background(), "schema_version")
 	db.Close()
-	if v != "1" {
+	if v != "2" {
 		t.Errorf("schema_version = %q", v)
 	}
 	if _, err := os.Stat(filepath.Dir(e.log)); err != nil {
@@ -731,5 +731,17 @@ func TestUninstallInterruptedDoesNotClaimNotInstalled(t *testing.T) {
 	out, err := runCtx(t, ctx, "daemon", "uninstall")
 	if !errors.Is(err, context.Canceled) || strings.Contains(out, "not installed") {
 		t.Errorf("err=%v out=%q, want an interruption, not 'not installed'", err, out)
+	}
+}
+
+func TestRunOnceRecordsAStart(t *testing.T) {
+	e := stubDaemon(t)
+	if _, err := run(t, "daemon", "run", "--once"); err != nil {
+		t.Fatal(err)
+	}
+	db, _ := store.Open(e.db, true)
+	defer db.Close()
+	if starts, _ := db.RunStartsBetween(context.Background(), 0, 1<<62); len(starts) != 1 || starts[0] != testNow.Unix() {
+		t.Errorf("run starts = %v, want [%d]", starts, testNow.Unix())
 	}
 }
