@@ -186,3 +186,19 @@ func TestStaleNewestSampleIsTreatedAsSleep(t *testing.T) {
 		t.Error("a newest sample exactly 90 s old must still count")
 	}
 }
+
+func TestOverTwelveHoursIsDecidedByTheEstimate(t *testing.T) {
+	// 67 % at ~3.3 %/hr is about 20 h: that is "> 12h", and JSON keeps the
+	// number. The old rule (rate < 0.5 %/hr) printed "20h 29m".
+	r := Build(onBattery, samples([]int{67, 67, 67, 67, 67, 67, 67, 67, 67, 66}, false), nil, now)
+	if r.Drain == nil || r.EstMinutes == nil || *r.EstMinutes <= 720 || !r.EstOver12h {
+		t.Errorf("Drain=%v EstMinutes=%v EstOver12h=%v, want an estimate over 720 min flagged > 12h", r.Drain, r.EstMinutes, r.EstOver12h)
+	}
+	// 3 % at 29.1 %/hr is 6 minutes: a real number, not "> 12h".
+	low := onBattery
+	low.Percent = 3
+	r = Build(low, samples([]int{70, 70, 69, 69, 68, 68, 67, 67, 66, 66}, false), nil, now)
+	if r.EstMinutes == nil || *r.EstMinutes != 6 || r.EstOver12h {
+		t.Errorf("EstMinutes=%v EstOver12h=%v, want 6 and false", r.EstMinutes, r.EstOver12h)
+	}
+}
