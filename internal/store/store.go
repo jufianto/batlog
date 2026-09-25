@@ -168,3 +168,32 @@ func (d *DB) EnergySince(ctx context.Context, since int64) ([]AppEnergy, error) 
 	}
 	return out, rows.Err()
 }
+
+// HealthRow is the part of a daily health row that the trend needs.
+type HealthRow struct {
+	Day       string // local calendar day, YYYY-MM-DD
+	RawMaxMAh int
+	DesignMAh int
+}
+
+// HealthSince returns health rows with day >= since, oldest first. Rows
+// missing either capacity cannot give a health percentage and are skipped.
+func (d *DB) HealthSince(ctx context.Context, since string) ([]HealthRow, error) {
+	rows, err := d.sql.QueryContext(ctx,
+		`SELECT day, raw_max_mah, design_mah FROM health
+		 WHERE day >= ? AND raw_max_mah IS NOT NULL AND design_mah > 0
+		 ORDER BY day`, since)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []HealthRow
+	for rows.Next() {
+		var h HealthRow
+		if err := rows.Scan(&h.Day, &h.RawMaxMAh, &h.DesignMAh); err != nil {
+			return nil, err
+		}
+		out = append(out, h)
+	}
+	return out, rows.Err()
+}
