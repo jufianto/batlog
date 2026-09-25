@@ -45,7 +45,9 @@ func runStatus(ctx context.Context, out, errw io.Writer, asJSON bool) error {
 
 	var samples []store.Sample
 	var energy []store.AppEnergy
+	dbFound := false
 	if p, err := dbPath(); err == nil && store.Exists(p) {
+		dbFound = true
 		// A database that fails to open is a warning, never a reason to hide
 		// the live fields. status never creates the database.
 		db, err := store.Open(p, true)
@@ -68,7 +70,7 @@ func runStatus(ctx context.Context, out, errw io.Writer, asJSON bool) error {
 	if asJSON {
 		return writeStatusJSON(out, r)
 	}
-	renderStatus(out, r)
+	renderStatus(out, r, dbFound)
 	return nil
 }
 
@@ -108,7 +110,7 @@ func writeStatusJSON(out io.Writer, r status.Report) error {
 	return enc.Encode(j)
 }
 
-func renderStatus(w io.Writer, r status.Report) {
+func renderStatus(w io.Writer, r status.Report, dbFound bool) {
 	icon, source, state := "🔋", "on battery", "discharging"
 	if r.OnAC {
 		icon, source = "⚡", "AC"
@@ -137,7 +139,7 @@ func renderStatus(w io.Writer, r status.Report) {
 		var parts []string
 		if r.Drain != nil {
 			est := "> 12h"
-			if r.EstMinutes != nil {
+			if r.EstMinutes != nil && !r.EstOver12h {
 				est = fmtDuration(*r.EstMinutes)
 			}
 			parts = append(parts, est+"  (batlog)")
@@ -152,7 +154,7 @@ func renderStatus(w io.Writer, r status.Report) {
 	if r.Worst != nil {
 		fmt.Fprintf(w, "worst now   %s  (%.0f%% of energy)\n", r.Worst.App, r.Worst.Share*100)
 	}
-	if !r.HasData {
+	if !r.HasData && !dbFound {
 		fmt.Fprintln(w, "tip: run 'batlog daemon install' for drain analysis")
 	}
 }
