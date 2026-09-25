@@ -16,3 +16,14 @@ func TestUnknownFlagIsUsageError(t *testing.T) {
 		t.Fatalf("expected usageError, got %T: %v", err, err)
 	}
 }
+
+func TestExtraArgumentsAreUsageErrors(t *testing.T) {
+	for _, args := range [][]string{{"status", "extra"}, {"bogus-command"}} {
+		rootCmd.SetArgs(args)
+		err := rootCmd.Execute()
+		var ue usageError
+		if err == nil || !errors.As(err, &ue) {
+			t.Errorf("args %v: expected usageError, got %T: %v", args, err, err)
+		}
+	}
+}
