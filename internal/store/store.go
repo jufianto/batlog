@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"net/url"
 	"os"
 	"sort"
 	"strconv"
@@ -51,13 +52,7 @@ func Exists(path string) bool {
 // except the daemon. WAL mode and a busy timeout keep a reader and the
 // daemon's writer from blocking each other.
 func Open(path string, readOnly bool) (*DB, error) {
-	dsn := "file:" + path + "?_pragma=busy_timeout(5000)"
-	if readOnly {
-		dsn += "&mode=ro"
-	} else {
-		dsn += "&_pragma=journal_mode(WAL)"
-	}
-	db, err := sql.Open("sqlite", dsn)
+	db, err := sql.Open("sqlite", dsn(path, readOnly))
 	if err != nil {
 		return nil, err
 	}
@@ -68,6 +63,18 @@ func Open(path string, readOnly bool) (*DB, error) {
 		return nil, fmt.Errorf("open %s: %w", path, err)
 	}
 	return &DB{sql: db}, nil
+}
+
+// dsn builds the SQLite URI. The path is percent-escaped because SQLite
+// reads '#', '?' and '%' in a file: URI as syntax, not as part of the name.
+// Readers wait at most 500 ms for a lock so a command stays inside its 1 s
+// budget; the daemon's writer waits 5 s.
+func dsn(path string, readOnly bool) string {
+	u := (&url.URL{Path: path}).EscapedPath()
+	if readOnly {
+		return "file:" + u + "?_pragma=busy_timeout(500)&mode=ro"
+	}
+	return "file:" + u + "?_pragma=busy_timeout(5000)&_pragma=journal_mode(WAL)"
 }
 
 // Close releases the handle.
@@ -224,7 +231,8 @@ type HealthDay struct {
 
 // WriteTick stores a sample, the optional health row and meta.last_tick in
 // one transaction. A second sample in the same second is ignored; a second
-// health row on the same day replaces the first.
+// health row on the same day updates the first, keeping known values where
+// the new read has none.
 func (d *DB) WriteTick(ctx context.Context, t Tick) error {
 	tx, err := d.sql.BeginTx(ctx, nil)
 	if err != nil {
@@ -242,9 +250,13 @@ func (d *DB) WriteTick(ctx context.Context, t Tick) error {
 		if _, err := tx.ExecContext(ctx,
 			`INSERT INTO health(day, cycles, raw_max_mah, nominal_mah, design_mah, temp_c, condition)
 			 VALUES(?,?,?,?,?,?,?)
-			 ON CONFLICT(day) DO UPDATE SET cycles=excluded.cycles, raw_max_mah=excluded.raw_max_mah,
-			   nominal_mah=excluded.nominal_mah, design_mah=excluded.design_mah,
-			   temp_c=excluded.temp_c, condition=excluded.condition`,
+			 ON CONFLICT(day) DO UPDATE SET
+			   cycles      = COALESCE(excluded.cycles, health.cycles),
+			   raw_max_mah = COALESCE(excluded.raw_max_mah, health.raw_max_mah),
+			   nominal_mah = COALESCE(excluded.nominal_mah, health.nominal_mah),
+			   design_mah  = COALESCE(excluded.design_mah, health.design_mah),
+			   temp_c      = COALESCE(excluded.temp_c, health.temp_c),
+			   condition   = COALESCE(excluded.condition, health.condition)`,
 			h.Day, h.Cycles, h.RawMaxMAh, h.NominalMAh, h.DesignMAh, h.TempC, h.Condition); err != nil {
 			return fmt.Errorf("write health: %w", err)
 		}
