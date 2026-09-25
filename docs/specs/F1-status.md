@@ -22,7 +22,9 @@ No other flags. Must answer in under 1 s.
      ≥ 3 samples and no gap > 90 s inside the window; otherwise omitted.
      The fit — not the last two samples — is what keeps the number steady.
    - **batlog estimate** = percent ÷ drain rate, only while discharging. If
-     the rate is below 0.5 %/hr, show `> 12h` instead of a number.
+     the estimate is over 12 h, or the rate is 0, show `> 12h` instead of a
+     number. JSON `est_minutes_left` keeps the minutes whenever the rate is
+     above 0, and is `null` only at a rate of 0.
    - **Worst offender** = app with the highest `SUM(energy)` in the window.
 3. Render. Anything that cannot be computed is omitted (human) or `null`
    (JSON). Never guessed.
@@ -59,7 +61,7 @@ JSON (stable):
 
 | Case | Behaviour |
 |---|---|
-| Daemon never installed / no recent samples | Live fields only, plus `tip: run 'batlog daemon install' for drain analysis` |
+| Daemon never installed / no recent samples | Live fields only, plus `tip: run 'batlog daemon install' for drain analysis` when no database exists |
 | Just unplugged (< 3 samples on battery) | Omit drain; show `drain: collecting…` |
 | Sleep gap inside the 10-min window | Use post-wake samples only; if < 3, omit |
 | `TimeRemaining` = 65535 | Omit macOS estimate |

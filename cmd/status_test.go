@@ -199,6 +199,9 @@ func TestStatusCorruptDatabaseWarnsAndStillPrints(t *testing.T) {
 	if !strings.Contains(errw.String(), "warning") {
 		t.Errorf("expected a warning on stderr, got %q", errw.String())
 	}
+	if strings.Contains(out.String(), "tip:") {
+		t.Errorf("the database exists, so 'install the daemon' is the wrong advice:\n%s", out.String())
+	}
 }
 
 func TestStatusProbeErrorPropagates(t *testing.T) {

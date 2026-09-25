@@ -18,8 +18,8 @@ const (
 	sleepGap = 90 * time.Second
 	// minSamples for a drain rate; fewer means "collecting".
 	minSamples = 3
-	// minRate in %/hr; below this the estimate is "> 12h".
-	minRate = 0.5
+	// over12h: estimates longer than this print as "> 12h".
+	over12h = 12 * 60
 )
 
 // Offender is the app with the highest energy in the window.
@@ -41,8 +41,8 @@ type Report struct {
 	HasData    bool // any daemon rows in the window
 	Collecting bool // on battery with data but fewer than minSamples usable rows
 	Drain      *float64
-	EstMinutes *int
-	EstOver12h bool // Drain set but below minRate
+	EstMinutes *int // nil when the rate is 0
+	EstOver12h bool // Drain set and the estimate is over 12 h (or infinite)
 	Worst      *Offender
 }
 
@@ -75,11 +75,12 @@ func Build(s battery.Snapshot, samples []store.Sample, energy []store.AppEnergy,
 			}
 			rounded := math.Round(rate*10) / 10
 			r.Drain = &rounded
-			if rate < minRate {
+			if rate == 0 {
 				r.EstOver12h = true
 			} else {
 				est := int(math.Round(float64(s.Percent) / rate * 60))
 				r.EstMinutes = &est
+				r.EstOver12h = est > over12h
 			}
 		}
 	}
