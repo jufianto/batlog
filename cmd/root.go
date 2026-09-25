@@ -28,6 +28,20 @@ var rootCmd = &cobra.Command{
 	Version:       version,
 	SilenceUsage:  true,
 	SilenceErrors: true,
+	// Runnable so that an unknown subcommand fails argument validation
+	// (exit 2) instead of cobra's plain "unknown command" error (exit 1).
+	Args: usageArgs(cobra.NoArgs),
+	RunE: func(cmd *cobra.Command, _ []string) error { return cmd.Help() },
+}
+
+// usageArgs marks positional-argument errors as usage errors (exit 2).
+func usageArgs(check cobra.PositionalArgs) cobra.PositionalArgs {
+	return func(cmd *cobra.Command, args []string) error {
+		if err := check(cmd, args); err != nil {
+			return usageError{err}
+		}
+		return nil
+	}
 }
 
 func init() {
