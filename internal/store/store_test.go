@@ -34,7 +34,7 @@ func TestMigrateCreatesSchemaAndIsIdempotent(t *testing.T) {
 		t.Fatalf("second Migrate must be a no-op, got %v", err)
 	}
 	var v string
-	if err := db.sql.QueryRowContext(ctx, "SELECT value FROM meta WHERE key='schema_version'").Scan(&v); err != nil || v != "1" {
+	if err := db.sql.QueryRowContext(ctx, "SELECT value FROM meta WHERE key='schema_version'").Scan(&v); err != nil || v != "2" {
 		t.Fatalf("schema_version = %q, %v; want \"1\"", v, err)
 	}
 }
@@ -334,4 +334,65 @@ func TestHealthUpsertKeepsKnownValues(t *testing.T) {
 	if cycles != 389 || raw != 5424 || design != 6249 || cond != "Normal" {
 		t.Errorf("cycles=%d raw=%d design=%d cond=%q", cycles, raw, design, cond)
 	}
+}
+
+func TestRunStartsAndSampleLookups(t *testing.T) {
+	db, _ := openTemp(t)
+	ctx := context.Background()
+	var v string
+	db.sql.QueryRowContext(ctx, "SELECT value FROM meta WHERE key='schema_version'").Scan(&v)
+	if v != "2" {
+		t.Fatalf("schema_version = %q, want 2 (runs table)", v)
+	}
+	for _, ts := range []int64{100, 500, 900} {
+		if err := db.RecordRunStart(ctx, ts); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := db.RecordRunStart(ctx, 500); err != nil {
+		t.Errorf("recording the same start twice must be harmless: %v", err)
+	}
+	got, err := db.RunStartsBetween(ctx, 200, 900)
+	if err != nil || len(got) != 2 || got[0] != 500 || got[1] != 900 {
+		t.Errorf("RunStartsBetween = %v, %v", got, err)
+	}
+
+	for _, s := range []Tick{{TS: 1000, Pct: 90, OnAC: true}, {TS: 1060, Pct: 89}, {TS: 1120, Pct: 88}, {TS: 1180, Pct: 88, OnAC: true}} {
+		db.WriteTick(ctx, s)
+	}
+	if s, ok, err := db.LastSampleBefore(ctx, 1180); err != nil || !ok || s.TS != 1120 {
+		t.Errorf("LastSampleBefore(1180) = %+v %v %v", s, ok, err)
+	}
+	if _, ok, _ := db.LastSampleBefore(ctx, 1000); ok {
+		t.Error("nothing before the first sample")
+	}
+	if s, ok, err := db.LastSampleBeforeWithState(ctx, 1180, true); err != nil || !ok || s.TS != 1000 {
+		t.Errorf("last AC sample before 1180 = %+v %v %v", s, ok, err)
+	}
+}
+
+func TestMigratingAVersionOneDatabaseAddsRuns(t *testing.T) {
+	// The live database was created at schema 1; the daemon's next start
+	// must upgrade it in place without touching its samples.
+	path := filepath.Join(t.TempDir(), "batlog.db")
+	db, err := Open(path, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := context.Background()
+	body, _ := migrations.ReadFile("migrations/0001_init.sql")
+	db.Exec(ctx, `CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)`)
+	db.Exec(ctx, string(body))
+	db.Exec(ctx, `INSERT INTO meta VALUES('schema_version','1')`)
+	db.WriteTick(ctx, Tick{TS: 1, Pct: 50})
+	if err := db.Migrate(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.RecordRunStart(ctx, 5); err != nil {
+		t.Errorf("runs table missing after upgrade: %v", err)
+	}
+	if n, _, _ := db.SampleStats(ctx); n != 1 {
+		t.Errorf("samples after upgrade = %d", n)
+	}
+	db.Close()
 }
