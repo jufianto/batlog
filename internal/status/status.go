@@ -18,6 +18,9 @@ const (
 	sleepGap = 90 * time.Second
 	// minSamples for a drain rate; fewer means "collecting".
 	minSamples = 3
+	// flatRate in %/hr: a fitted rate smaller than this, either sign, is a
+	// flat battery. Whole-percent samples cannot resolve less in 10 minutes.
+	flatRate = 0.05
 	// over12h: estimates longer than this print as "> 12h".
 	over12h = 12 * 60
 )
@@ -69,9 +72,9 @@ func Build(s battery.Snapshot, samples []store.Sample, energy []store.AppEnergy,
 		usable := sinceLastBreak(samples, now)
 		if len(usable) < minSamples {
 			r.Collecting = true
-		} else if rate := -slopePerHour(usable); rate >= 0 {
-			if rate == 0 {
-				rate = 0 // normalise -0 so JSON never prints "-0"
+		} else if rate := -slopePerHour(usable); rate > -flatRate {
+			if rate < flatRate {
+				rate = 0 // flat; also turns -0 into 0 so JSON never prints "-0"
 			}
 			rounded := math.Round(rate*10) / 10
 			r.Drain = &rounded
@@ -111,23 +114,29 @@ func sinceLastBreak(samples []store.Sample, now time.Time) []store.Sample {
 }
 
 // slopePerHour is the least-squares slope of pct against time in hours.
+// It is computed from deviations around the means: for a flat series every
+// y - ȳ is exactly 0, so the slope is exactly 0 rather than the ±1e-13 the
+// n·Σxy − Σx·Σy form leaves behind.
 func slopePerHour(samples []store.Sample) float64 {
 	n := float64(len(samples))
 	t0 := samples[0].TS
-	var sx, sy, sxx, sxy float64
+	var mx, my float64
 	for _, s := range samples {
-		x := float64(s.TS-t0) / 3600
-		y := float64(s.Pct)
-		sx += x
-		sy += y
-		sxx += x * x
-		sxy += x * y
+		mx += float64(s.TS-t0) / 3600
+		my += float64(s.Pct)
 	}
-	den := n*sxx - sx*sx
-	if den == 0 {
+	mx /= n
+	my /= n
+	var sxy, sxx float64
+	for _, s := range samples {
+		dx := float64(s.TS-t0)/3600 - mx
+		sxy += dx * (float64(s.Pct) - my)
+		sxx += dx * dx
+	}
+	if sxx == 0 {
 		return 0
 	}
-	return (n*sxy - sx*sy) / den
+	return sxy / sxx
 }
 
 // worst sums energy per app and returns the largest as a share of the total.

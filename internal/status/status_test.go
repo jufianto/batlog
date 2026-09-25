@@ -1,6 +1,7 @@
 package status
 
 import (
+	"fmt"
 	"math"
 	"testing"
 	"time"
@@ -200,5 +201,27 @@ func TestOverTwelveHoursIsDecidedByTheEstimate(t *testing.T) {
 	r = Build(low, samples([]int{70, 70, 69, 69, 68, 68, 67, 67, 66, 66}, false), nil, now)
 	if r.EstMinutes == nil || *r.EstMinutes != 6 || r.EstOver12h {
 		t.Errorf("EstMinutes=%v EstOver12h=%v, want 6 and false", r.EstMinutes, r.EstOver12h)
+	}
+}
+
+func TestFlatBatteryIsExactlyZeroWhateverTheTimestamps(t *testing.T) {
+	// Real ticks jitter by a second or so. A flat series must still give a
+	// drain of exactly 0 and "> 12h": not a 1e16-minute estimate from a
+	// +1e-13 slope, and not a missing drain line from a -1e-13 one.
+	seed := uint64(1)
+	next := func() int64 { seed = seed*6364136223846793005 + 1442695040888963407; return int64(seed>>33) % 3 }
+	for trial := 0; trial < 200; trial++ {
+		s := samples([]int{67, 67, 67, 67, 67, 67, 67, 67, 67, 67}, false)
+		for i := range s {
+			s[i].TS += next() - 1 // -1, 0 or +1 s
+		}
+		r := Build(onBattery, s, nil, now)
+		if r.Drain == nil || *r.Drain != 0 || math.Signbit(*r.Drain) || !r.EstOver12h || r.EstMinutes != nil {
+			d := "nil"
+			if r.Drain != nil {
+				d = fmt.Sprint(*r.Drain)
+			}
+			t.Fatalf("trial %d: Drain=%s EstOver12h=%v EstMinutes=%v", trial, d, r.EstOver12h, r.EstMinutes)
+		}
 	}
 }
