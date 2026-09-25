@@ -12,7 +12,9 @@ const envHome = "BATLOG_HOME"
 // ~/Library/Application Support/batlog.
 func Home() (string, error) {
 	if h := os.Getenv(envHome); h != "" {
-		return h, nil
+		// Absolute, because the daemon runs from "/" and must find the
+		// same directory the installer's shell meant.
+		return filepath.Abs(h)
 	}
 	home, err := os.UserHomeDir()
 	if err != nil {
@@ -33,7 +35,11 @@ func DB() (string, error) {
 // Log is the daemon log path. With BATLOG_HOME set it sits beside the
 // database so tests and power users get one self-contained directory.
 func Log() (string, error) {
-	if h := os.Getenv(envHome); h != "" {
+	if os.Getenv(envHome) != "" {
+		h, err := Home()
+		if err != nil {
+			return "", err
+		}
 		return filepath.Join(h, "daemon.log"), nil
 	}
 	home, err := os.UserHomeDir()

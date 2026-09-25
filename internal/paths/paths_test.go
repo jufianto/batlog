@@ -50,3 +50,22 @@ func TestLaunchAgentIgnoresBatlogHome(t *testing.T) {
 		t.Fatalf("LaunchAgent() = %q, %v", p, err)
 	}
 }
+
+func TestRelativeBatlogHomeBecomesAbsolute(t *testing.T) {
+	// The daemon runs from "/", so a relative path from the installer's
+	// shell would point somewhere else entirely.
+	dir := t.TempDir()
+	t.Chdir(dir)
+	t.Setenv("BATLOG_HOME", "data/batlog")
+	home, err := Home()
+	if err != nil {
+		t.Fatal(err)
+	}
+	want, _ := filepath.EvalSymlinks(dir)
+	if got, _ := filepath.EvalSymlinks(filepath.Dir(filepath.Dir(home))); !filepath.IsAbs(home) || got != want {
+		t.Errorf("Home() = %q, want an absolute path under %q", home, dir)
+	}
+	if log, _ := Log(); !filepath.IsAbs(log) {
+		t.Errorf("Log() = %q, want absolute", log)
+	}
+}
