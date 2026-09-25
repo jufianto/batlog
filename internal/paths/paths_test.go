@@ -40,3 +40,13 @@ func TestDefaultsFollowApplicationSupport(t *testing.T) {
 		t.Fatalf("Log() = %q, want %q", log, wantLog)
 	}
 }
+
+func TestLaunchAgentIgnoresBatlogHome(t *testing.T) {
+	// launchd only reads ~/Library/LaunchAgents, whatever BATLOG_HOME says.
+	t.Setenv("BATLOG_HOME", "/tmp/bl-test")
+	t.Setenv("HOME", "/Users/example")
+	p, err := LaunchAgent()
+	if err != nil || p != "/Users/example/Library/LaunchAgents/dev.jufi.batlog.plist" {
+		t.Fatalf("LaunchAgent() = %q, %v", p, err)
+	}
+}
