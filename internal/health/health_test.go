@@ -48,23 +48,30 @@ func TestBuildMissingCapacityNamesTheKey(t *testing.T) {
 	if r.HealthPct != nil || r.AppleHealthPct != nil {
 		t.Errorf("no design capacity: HealthPct = %v AppleHealthPct = %v", r.HealthPct, r.AppleHealthPct)
 	}
-	if !reflect.DeepEqual(r.MissingKeys, []string{"DesignCapacity"}) {
-		t.Errorf("MissingKeys = %v", r.MissingKeys)
+	if !reflect.DeepEqual(r.MissingKeys, []string{"DesignCapacity"}) || r.HealthNote != "ioreg has no DesignCapacity" {
+		t.Errorf("MissingKeys = %v HealthNote = %q", r.MissingKeys, r.HealthNote)
 	}
 	r = Build(battery.Health{})
-	if !reflect.DeepEqual(r.MissingKeys, []string{"AppleRawMaxCapacity", "DesignCapacity"}) {
-		t.Errorf("MissingKeys = %v", r.MissingKeys)
+	if !reflect.DeepEqual(r.MissingKeys, []string{"AppleRawMaxCapacity", "DesignCapacity"}) ||
+		r.HealthNote != "ioreg has no AppleRawMaxCapacity or DesignCapacity" {
+		t.Errorf("MissingKeys = %v HealthNote = %q", r.MissingKeys, r.HealthNote)
 	}
 	if r.Condition != nil {
 		t.Errorf("no PermanentFailureStatus key: Condition = %v, want nil", *r.Condition)
 	}
 }
 
-func TestBuildDesignCapacityZeroIsMissing(t *testing.T) {
+func TestBuildDesignCapacityZeroSaysSo(t *testing.T) {
+	// ioreg has the key, so "ioreg has no DesignCapacity" would send the
+	// user looking for a bug that is not there.
 	h := appleSilicon
 	h.DesignMAh = ip(0)
-	if r := Build(h); r.HealthPct != nil || len(r.MissingKeys) != 1 {
-		t.Errorf("design 0 must not divide: HealthPct = %v MissingKeys = %v", r.HealthPct, r.MissingKeys)
+	r := Build(h)
+	if r.HealthPct != nil || r.AppleHealthPct != nil {
+		t.Errorf("design 0 must not divide: HealthPct = %v", r.HealthPct)
+	}
+	if r.HealthNote != "DesignCapacity is 0" {
+		t.Errorf("HealthNote = %q", r.HealthNote)
 	}
 }
 
@@ -90,7 +97,7 @@ func TestTrendLinearDecline(t *testing.T) {
 	if tr == nil {
 		t.Fatal("trend must be computed from 3 rows over 60 days")
 	}
-	if span != 60 || tr.Days != 60 || tr.FromPct != 88.0 || tr.ToPct != 87.4 {
+	if span != 60 || tr.Days != 60 || tr.FromPct != 88.0 || tr.ToPct != 87.4 || tr.LastDay != "2026-07-31" {
 		t.Errorf("trend = %+v span = %d", *tr, span)
 	}
 	if math.Abs(tr.PctPerMonth-(-0.3)) > 1e-9 {
@@ -133,5 +140,15 @@ func TestSinceIsNinetyDaysBeforeToday(t *testing.T) {
 	today := time.Date(2026, 9, 26, 23, 30, 0, 0, time.Local)
 	if got := Since(today); got != "2026-06-28" {
 		t.Errorf("Since = %q, want 2026-06-28", got)
+	}
+}
+
+func TestTrendSkipsMalformedDays(t *testing.T) {
+	// Text ordering puts "2026-9-2" after every real date and "" before
+	// them; neither may wipe out months of good rows.
+	rs := rows(1000, "", 999, "2026-06-01", 880, "2026-07-01", 877, "2026-07-31", 874, "2026-9-2", 1)
+	tr, span := Trend(rs)
+	if tr == nil || span != 60 || tr.FromPct != 88.0 || tr.ToPct != 87.4 || math.Abs(tr.PctPerMonth-(-0.3)) > 1e-9 {
+		t.Errorf("trend = %+v span = %d, want the three valid rows only", tr, span)
 	}
 }
