@@ -32,7 +32,7 @@ cmd/daemon.go        the five subcommands; launchd client, executable path
                      and clock injectable for tests
 ```
 
-`launchctl` is behind a `Run func(args ...string) ([]byte, error)` so tests
+`launchctl` is behind a `Run func(ctx context.Context, args ...string) ([]byte, error)` so tests
 check the exact arguments without touching launchd.
 
 ## Behaviour notes
