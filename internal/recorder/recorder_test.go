@@ -161,10 +161,9 @@ func TestRunKeepsGoingAfterErrorsAndStopsOnCancel(t *testing.T) {
 	go func() { done <- e.rec.Run(ctx, 5*time.Millisecond) }()
 	deadline := time.After(5 * time.Second)
 	for {
-		e.mu.Lock()
-		reads := e.reads
-		e.mu.Unlock()
-		if reads >= 4 {
+		// Wait for completed writes, not reads: a read's write may still be
+		// in flight when the loop is cancelled.
+		if n, _, _ := e.db.SampleStats(context.Background()); n >= 3 {
 			break
 		}
 		select {
@@ -204,8 +203,9 @@ func TestTruncateLogKeepsWholeTrailingLines(t *testing.T) {
 		t.Fatalf("TruncateLog = %v, %v", cut, err)
 	}
 	got, _ := os.ReadFile(path)
-	if len(got) > 40 || !strings.HasPrefix(string(got), "line-") || !strings.HasSuffix(string(got), "xxxxx\n") {
-		t.Errorf("after cut: %q", got)
+	kept := strings.TrimSuffix(string(got), TruncatedMarker+"\n")
+	if len(kept) > 40 || kept == string(got) || !strings.HasPrefix(kept, "line-") || !strings.HasSuffix(kept, "xxxxx\n") {
+		t.Errorf("after cut: %q, want at most 40 bytes of whole lines, then the marker", got)
 	}
 	if cut, _ := TruncateLog(path, 100, 40); cut {
 		t.Error("a small log must be left alone")
@@ -234,7 +234,19 @@ func TestTruncateLogInPlaceKeepsAppendersWorking(t *testing.T) {
 		t.Fatal(err)
 	}
 	got, _ := os.ReadFile(path)
-	if !strings.HasSuffix(string(got), "old-line\nnew-line\n") || len(got) > 40 {
+	if !strings.HasSuffix(string(got), "old-line\n"+TruncatedMarker+"\nnew-line\n") || len(got) > 30+len(TruncatedMarker)+1+9 {
 		t.Errorf("after cut and append: %q", got)
+	}
+}
+
+func TestTruncateLogLeavesAMarker(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "daemon.log")
+	os.WriteFile(path, []byte(strings.Repeat("line-xxxxx\n", 20)), 0o644)
+	if _, err := TruncateLog(path, 100, 40); err != nil {
+		t.Fatal(err)
+	}
+	got, _ := os.ReadFile(path)
+	if !strings.HasSuffix(string(got), "line-xxxxx\n"+TruncatedMarker+"\n") {
+		t.Errorf("after cut: %q, want the kept tail then the marker line", got)
 	}
 }

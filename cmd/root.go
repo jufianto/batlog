@@ -61,6 +61,10 @@ func Execute() {
 	defer stop()
 	if err := rootCmd.ExecuteContext(ctx); err != nil {
 		stop()
+		if errors.Is(err, context.Canceled) {
+			fmt.Fprintln(os.Stderr, "batlog: interrupted")
+			os.Exit(1)
+		}
 		fmt.Fprintln(os.Stderr, "batlog:", err)
 		var ue usageError
 		if errors.As(err, &ue) {

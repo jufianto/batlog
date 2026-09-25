@@ -103,9 +103,14 @@ func TickFrom(s battery.Snapshot, now time.Time, withHealth bool) store.Tick {
 	return t
 }
 
+// TruncatedMarker is the line TruncateLog leaves after the kept tail, so
+// `logs -f` can resume after it instead of replaying the tail.
+const TruncatedMarker = "--- batlog: log truncated here ---"
+
 // TruncateLog cuts a log larger than max bytes down to its last keep bytes,
-// starting at a line boundary. It works in place because launchd holds the
-// file open in append mode; replacing the file would orphan launchd's writes.
+// starting at a line boundary, followed by TruncatedMarker. It works in
+// place because launchd holds the file open in append mode; replacing the
+// file would orphan launchd's writes.
 func TruncateLog(path string, max, keep int64) (bool, error) {
 	f, err := os.OpenFile(path, os.O_RDWR, 0)
 	if errors.Is(err, fs.ErrNotExist) {
@@ -126,6 +131,7 @@ func TruncateLog(path string, max, keep int64) (bool, error) {
 	if i := bytes.IndexByte(tail, '\n'); i >= 0 {
 		tail = tail[i+1:]
 	}
+	tail = append(tail, TruncatedMarker+"\n"...)
 	if err := f.Truncate(0); err != nil {
 		return false, err
 	}
