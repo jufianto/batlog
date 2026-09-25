@@ -62,10 +62,12 @@ ends now: drop everything up to the last row with `on_ac = true` or before the
 last gap greater than 90 s (sleep), whichever is later, so a fit never spans a
 plug-in. If the newest row is itself more than 90 s old, the Mac has just
 woken or the daemon stopped, and nothing is usable. Fewer than three rows
-left → rate omitted, shown as `collecting…`. Otherwise the rate is the least-squares slope
-of `pct` against time in hours, reported as a positive %/hr while discharging.
-Estimate = `percent / rate` in minutes, only while discharging; a rate below
-0.5 %/hr renders as `> 12h`. Worst offender = the app with the largest
+left → rate omitted, shown as `collecting…`. Otherwise the rate is the
+least-squares slope of `pct` against time in hours (computed from deviations
+around the means, so a flat battery is exactly 0), reported as a positive
+%/hr while discharging; under 0.05 %/hr either way is flat. Estimate =
+`percent / rate` in minutes, only while discharging; over 12 h, or a rate of
+0, renders as `> 12h`. Worst offender = the app with the largest
 `SUM(energy)` over the same window, with its share of the window total.
 
 ## Errors

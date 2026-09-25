@@ -30,13 +30,16 @@ batlog daemon install | uninstall | status | logs [-f] | run [--once]
 2. Energy probe (`top`, grouped, top 15) → `app_energy` rows. Same transaction.
 3. Once per calendar day (first tick after midnight or after boot): write a
    `health` row (`day` = local date as `YYYY-MM-DD`; upsert, so a second
-   write the same day replaces the first); roll up and prune raw rows older than 90 days.
+   write the same day updates the first but never blanks a value it lacks);
+   roll up and prune raw rows older than 90 days.
 4. Update `meta.last_tick`. Per-probe timeout 10 s. On any probe or write
    error: log it, skip the tick, continue. Never exit on a data error.
 
 **status:** installed? (plist exists) · loaded? (`launchctl print`) · alive?
-(`last_tick` age: healthy < 2 min, stale 2–10 min, dead > 10 min) · database
-path and size · sample count · date of oldest sample.
+(`last_tick` age: healthy < 2 min, stale 2–10 min, dead > 10 min; no tick
+yet is `waiting` for 2 min after install, then dead) · database path and
+size · sample count · date of oldest sample. status, uninstall and logs use
+the plist's `BATLOG_HOME` when it has one.
 
 **uninstall:** `bootout` + delete the plist. **Never deletes data**; prints
 `data kept at <path> — delete it yourself if you want it gone`.
@@ -66,7 +69,7 @@ Under 1 % average CPU, under 30 MB resident memory, database growth under
 | Binary moved after install | `status` shows loaded-but-dead and says `re-run 'batlog daemon install'` |
 | Manual `run` while launchd's is running | SQLite `busy_timeout` keeps writes safe; `run` warns if `last_tick` is under 30 s old |
 | Disk full | Log each tick, keep trying; read commands still work |
-| Mac wakes from sleep | Next tick is normal; the gap is handled at read time (F3) |
+| Mac wakes from sleep | Next tick is normal; the gap is handled at read time (F3). Go's timers stop during sleep, so the first tick can be up to a minute late: for 2 min after `kern.waketime`, `status` reports running if the last tick came within 2 min of `kern.sleeptime` |
 | `launchctl bootstrap` fails | Exit 1 with launchctl's own message; plist left in place for inspection |
 
 ## Acceptance criteria

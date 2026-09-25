@@ -45,7 +45,11 @@ trend (90 days)   87.9% → 86.8%   ≈ −0.37 %/month
 
 JSON: `{health_pct, apple_health_pct, raw_max_mah, nominal_mah, design_mah,
 cycle_count, temperature_c, voltage_v, condition,
-trend: {from_pct, to_pct, pct_per_month, days} | null}`.
+trend: {from_pct, to_pct, pct_per_month, days, last_day} | null}`.
+`days` is the span between the first and last row used; the human label
+shows it (`trend (60 days)`). If the newest row is more than 3 days old the
+line ends with `(last recorded DD Mon)`. Rows whose day does not parse are
+skipped.
 
 ## Edge cases
 
