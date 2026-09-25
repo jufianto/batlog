@@ -197,3 +197,81 @@ func (d *DB) HealthSince(ctx context.Context, since string) ([]HealthRow, error)
 	}
 	return out, rows.Err()
 }
+
+// Tick is everything the recorder writes for one sample. Nil pointers are
+// stored as NULL: a value the probe did not report is never written as 0.
+type Tick struct {
+	TS        int64
+	Pct       int
+	OnAC      bool
+	Charging  bool
+	Watts     *float64
+	RawCurMAh *int
+	RawMaxMAh *int
+	Health    *HealthDay // set on the first tick of a calendar day
+}
+
+// HealthDay is one row of the health table.
+type HealthDay struct {
+	Day        string // local date, YYYY-MM-DD
+	Cycles     *int
+	RawMaxMAh  *int
+	NominalMAh *int
+	DesignMAh  *int
+	TempC      *float64
+	Condition  *string
+}
+
+// WriteTick stores a sample, the optional health row and meta.last_tick in
+// one transaction. A second sample in the same second is ignored; a second
+// health row on the same day replaces the first.
+func (d *DB) WriteTick(ctx context.Context, t Tick) error {
+	tx, err := d.sql.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	if _, err := tx.ExecContext(ctx,
+		`INSERT INTO samples(ts, pct, on_ac, charging, watts, raw_cur_mah, raw_max_mah)
+		 VALUES(?,?,?,?,?,?,?) ON CONFLICT(ts) DO NOTHING`,
+		t.TS, t.Pct, t.OnAC, t.Charging, t.Watts, t.RawCurMAh, t.RawMaxMAh); err != nil {
+		return fmt.Errorf("write sample: %w", err)
+	}
+	if h := t.Health; h != nil {
+		if _, err := tx.ExecContext(ctx,
+			`INSERT INTO health(day, cycles, raw_max_mah, nominal_mah, design_mah, temp_c, condition)
+			 VALUES(?,?,?,?,?,?,?)
+			 ON CONFLICT(day) DO UPDATE SET cycles=excluded.cycles, raw_max_mah=excluded.raw_max_mah,
+			   nominal_mah=excluded.nominal_mah, design_mah=excluded.design_mah,
+			   temp_c=excluded.temp_c, condition=excluded.condition`,
+			h.Day, h.Cycles, h.RawMaxMAh, h.NominalMAh, h.DesignMAh, h.TempC, h.Condition); err != nil {
+			return fmt.Errorf("write health: %w", err)
+		}
+	}
+	if _, err := tx.ExecContext(ctx,
+		`INSERT INTO meta(key, value) VALUES('last_tick', ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value`,
+		strconv.FormatInt(t.TS, 10)); err != nil {
+		return fmt.Errorf("write last_tick: %w", err)
+	}
+	return tx.Commit()
+}
+
+// Meta reads one key from the meta table.
+func (d *DB) Meta(ctx context.Context, key string) (string, bool, error) {
+	var v string
+	err := d.sql.QueryRowContext(ctx, `SELECT value FROM meta WHERE key = ?`, key).Scan(&v)
+	switch {
+	case errors.Is(err, sql.ErrNoRows):
+		return "", false, nil
+	case err != nil:
+		return "", false, err
+	}
+	return v, true, nil
+}
+
+// SampleStats returns the number of samples and the oldest ts (0 if none).
+func (d *DB) SampleStats(ctx context.Context) (count int, oldest int64, err error) {
+	err = d.sql.QueryRowContext(ctx, `SELECT COUNT(*), COALESCE(MIN(ts), 0) FROM samples`).Scan(&count, &oldest)
+	return count, oldest, err
+}
