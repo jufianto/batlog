@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -258,5 +259,79 @@ func TestMetaAndSampleStatsOnEmptyDatabase(t *testing.T) {
 	}
 	if n, oldest, _ = db.SampleStats(ctx); n != 3 || oldest != 1000 {
 		t.Errorf("SampleStats = %d %d, want 3 1000", n, oldest)
+	}
+}
+
+func TestOpenPathWithURICharacters(t *testing.T) {
+	// SQLite reads "file:" DSNs as URIs: an unescaped '#' ends the path,
+	// '?' starts parameters and '%' starts an escape.
+	for _, name := range []string{"a#b", "c%20d", "e?f", "g h"} {
+		t.Run(name, func(t *testing.T) {
+			parent := t.TempDir()
+			dir := filepath.Join(parent, name)
+			if err := os.MkdirAll(dir, 0o755); err != nil {
+				t.Fatal(err)
+			}
+			path := filepath.Join(dir, "batlog.db")
+			db, err := Open(path, false)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := db.Migrate(context.Background()); err != nil {
+				t.Fatal(err)
+			}
+			if err := db.WriteTick(context.Background(), Tick{TS: 1, Pct: 5}); err != nil {
+				t.Fatal(err)
+			}
+			db.Close()
+			if !Exists(path) {
+				t.Fatalf("database not at %q", path)
+			}
+			entries, _ := os.ReadDir(parent)
+			if len(entries) != 1 {
+				t.Errorf("stray files created next to %q: %v", name, entries)
+			}
+			ro, err := Open(path, true)
+			if err != nil {
+				t.Fatalf("read-only reopen: %v", err)
+			}
+			if n, _, _ := ro.SampleStats(context.Background()); n != 1 {
+				t.Errorf("read-only handle sees %d samples", n)
+			}
+			ro.Close()
+		})
+	}
+}
+
+func TestReadOnlyHandlesWaitLessThanTheOneSecondBudget(t *testing.T) {
+	if got := dsn("/x/batlog.db", true); !strings.Contains(got, "busy_timeout(500)") || !strings.Contains(got, "mode=ro") {
+		t.Errorf("read-only dsn = %q, want busy_timeout(500) and mode=ro", got)
+	}
+	if got := dsn("/x/batlog.db", false); !strings.Contains(got, "busy_timeout(5000)") || !strings.Contains(got, "journal_mode(WAL)") {
+		t.Errorf("writer dsn = %q", got)
+	}
+}
+
+func TestHealthUpsertKeepsKnownValues(t *testing.T) {
+	// A later same-day write with a partial ioreg read must not blank out
+	// what the first write recorded.
+	db, _ := openTemp(t)
+	ctx := context.Background()
+	full := &HealthDay{Day: "2026-09-26", Cycles: sip(388), RawMaxMAh: sip(5424), NominalMAh: sip(5576),
+		DesignMAh: sip(6249), TempC: sfp(30.9), Condition: ssp("Normal")}
+	if err := db.WriteTick(ctx, Tick{TS: 1, Pct: 5, Health: full}); err != nil {
+		t.Fatal(err)
+	}
+	partial := &HealthDay{Day: "2026-09-26", Cycles: sip(389)}
+	if err := db.WriteTick(ctx, Tick{TS: 2, Pct: 5, Health: partial}); err != nil {
+		t.Fatal(err)
+	}
+	var cycles, raw, design int
+	var cond string
+	if err := db.sql.QueryRowContext(ctx, `SELECT cycles, raw_max_mah, design_mah, condition FROM health`).Scan(&cycles, &raw, &design, &cond); err != nil {
+		t.Fatalf("a column was blanked: %v", err)
+	}
+	if cycles != 389 || raw != 5424 || design != 6249 || cond != "Normal" {
+		t.Errorf("cycles=%d raw=%d design=%d cond=%q", cycles, raw, design, cond)
 	}
 }
