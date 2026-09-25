@@ -57,9 +57,12 @@ sets WAL and `busy_timeout`. F1 needs only `Open`, `Migrate`,
 
 ## Drain math (`internal/status`)
 
-Window = samples with `ts >= now - 10 min`. Drop everything before the last
-gap greater than 90 s (sleep), then drop rows with `on_ac = true`. Fewer than
-three rows left → rate omitted. Otherwise the rate is the least-squares slope
+Window = samples with `ts >= now - 10 min`. Keep only the on-battery run that
+ends now: drop everything up to the last row with `on_ac = true` or before the
+last gap greater than 90 s (sleep), whichever is later, so a fit never spans a
+plug-in. If the newest row is itself more than 90 s old, the Mac has just
+woken or the daemon stopped, and nothing is usable. Fewer than three rows
+left → rate omitted, shown as `collecting…`. Otherwise the rate is the least-squares slope
 of `pct` against time in hours, reported as a positive %/hr while discharging.
 Estimate = `percent / rate` in minutes, only while discharging; a rate below
 0.5 %/hr renders as `> 12h`. Worst offender = the app with the largest

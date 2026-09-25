@@ -138,3 +138,51 @@ func TestMissingLiveFieldsAreNil(t *testing.T) {
 		t.Errorf("optional snapshot fields must map to nil: %+v", r)
 	}
 }
+
+// withAC marks samples[from:to] as taken on AC.
+func withAC(s []store.Sample, from, to int) []store.Sample {
+	for i := from; i < to; i++ {
+		s[i].OnAC = true
+	}
+	return s
+}
+
+func TestUnplugAfterChargingIsCollecting(t *testing.T) {
+	// 5 min on battery, 4 min charging, unplugged 1 min ago: only one
+	// on-battery row since the unplug, so the spec's "just unplugged" case.
+	s := withAC(samples([]int{60, 59, 58, 57, 56, 58, 60, 62, 64, 64}, false), 5, 9)
+	r := Build(onBattery, s, nil, now)
+	if r.Drain != nil || !r.Collecting {
+		t.Errorf("just unplugged: Drain=%v Collecting=%v, want nil/true", r.Drain, r.Collecting)
+	}
+}
+
+func TestDrainIgnoresBatteryRowsFromBeforeAC(t *testing.T) {
+	// 80→78 on battery, held at 78 on AC, then flat on battery since the
+	// unplug. Only the post-unplug rows may be fitted: drain 0, not a
+	// slope across the AC stretch.
+	s := withAC(samples([]int{80, 79, 78, 78, 78, 78, 78, 78, 78, 78}, false), 3, 7)
+	r := Build(onBattery, s, nil, now)
+	if r.Drain == nil || *r.Drain != 0 {
+		t.Errorf("Drain = %v, want 0 from the 3 post-unplug rows", r.Drain)
+	}
+}
+
+func TestStaleNewestSampleIsTreatedAsSleep(t *testing.T) {
+	// Just woke (or the daemon stopped): the newest sample is more than
+	// 90 s old, so everything in the window is from before the gap.
+	s := samples([]int{70, 70, 69, 69, 68, 68, 67, 67, 66, 66}, false)
+	for i := range s {
+		s[i].TS -= 91
+	}
+	r := Build(onBattery, s, nil, now)
+	if r.Drain != nil || !r.Collecting {
+		t.Errorf("stale window: Drain=%v Collecting=%v, want nil/true", r.Drain, r.Collecting)
+	}
+	for i := range s {
+		s[i].TS++ // newest now exactly 90 s old: not a gap
+	}
+	if r := Build(onBattery, s, nil, now); r.Drain == nil {
+		t.Error("a newest sample exactly 90 s old must still count")
+	}
+}

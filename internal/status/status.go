@@ -66,7 +66,7 @@ func Build(s battery.Snapshot, samples []store.Sample, energy []store.AppEnergy,
 	}
 
 	if !s.OnAC && len(samples) > 0 {
-		usable := onBatteryAfterLastGap(samples)
+		usable := sinceLastBreak(samples, now)
 		if len(usable) < minSamples {
 			r.Collecting = true
 		} else if rate := -slopePerHour(usable); rate >= 0 {
@@ -88,22 +88,25 @@ func Build(s battery.Snapshot, samples []store.Sample, energy []store.AppEnergy,
 	return r
 }
 
-// onBatteryAfterLastGap drops everything before the last sleep gap, then
-// every row taken on AC.
-func onBatteryAfterLastGap(samples []store.Sample) []store.Sample {
+// sinceLastBreak returns the unbroken on-battery run that ends now. The run
+// starts after the last sleep gap or the last row taken on AC, whichever is
+// later, so a fit never spans a plug-in. If the newest row is itself more
+// than sleepGap old, the Mac has just woken (or the daemon stopped) and
+// nothing in the window is current.
+func sinceLastBreak(samples []store.Sample, now time.Time) []store.Sample {
+	last := samples[len(samples)-1]
+	if time.Duration(now.Unix()-last.TS)*time.Second > sleepGap {
+		return nil
+	}
 	start := 0
-	for i := 1; i < len(samples); i++ {
-		if time.Duration(samples[i].TS-samples[i-1].TS)*time.Second > sleepGap {
+	for i := range samples {
+		if samples[i].OnAC {
+			start = i + 1
+		} else if i > 0 && time.Duration(samples[i].TS-samples[i-1].TS)*time.Second > sleepGap {
 			start = i
 		}
 	}
-	var out []store.Sample
-	for _, s := range samples[start:] {
-		if !s.OnAC {
-			out = append(out, s)
-		}
-	}
-	return out
+	return samples[start:]
 }
 
 // slopePerHour is the least-squares slope of pct against time in hours.
