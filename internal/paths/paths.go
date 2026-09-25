@@ -42,3 +42,16 @@ func Log() (string, error) {
 	}
 	return filepath.Join(home, "Library", "Logs", "batlog", "daemon.log"), nil
 }
+
+// AgentLabel is the launchd label of the recorder (ADR-0004).
+const AgentLabel = "dev.jufi.batlog"
+
+// LaunchAgent is where the recorder's plist lives. launchd only looks in
+// ~/Library/LaunchAgents, so BATLOG_HOME does not move it.
+func LaunchAgent() (string, error) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(home, "Library", "LaunchAgents", AgentLabel+".plist"), nil
+}
