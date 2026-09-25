@@ -3,9 +3,12 @@
 package cmd
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os"
+	"os/signal"
+	"syscall"
 
 	"github.com/spf13/cobra"
 )
@@ -53,7 +56,11 @@ func init() {
 
 // Execute runs the CLI. Exit codes: 0 success, 1 operational error, 2 usage error.
 func Execute() {
-	if err := rootCmd.Execute(); err != nil {
+	// SIGTERM is how launchd stops the recorder; SIGINT ends `logs -f`.
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+	if err := rootCmd.ExecuteContext(ctx); err != nil {
+		stop()
 		fmt.Fprintln(os.Stderr, "batlog:", err)
 		var ue usageError
 		if errors.As(err, &ue) {
