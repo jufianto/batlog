@@ -5,14 +5,18 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/spf13/cobra"
+
 	"github.com/jufianto/batlog/internal/battery"
 	"github.com/jufianto/batlog/internal/launchd"
+	"github.com/jufianto/batlog/internal/recorder"
 	"github.com/jufianto/batlog/internal/store"
 )
 
@@ -22,8 +26,8 @@ type fakeCtl struct {
 	calls        []string
 }
 
-func (f *fakeCtl) Loaded() bool { f.calls = append(f.calls, "print"); return f.loaded }
-func (f *fakeCtl) Bootstrap(p string) error {
+func (f *fakeCtl) Loaded(context.Context) bool { f.calls = append(f.calls, "print"); return f.loaded }
+func (f *fakeCtl) Bootstrap(ctx context.Context, p string) error {
 	f.calls = append(f.calls, "bootstrap "+filepath.Base(p))
 	if f.bootstrapErr != nil {
 		return f.bootstrapErr
@@ -31,7 +35,11 @@ func (f *fakeCtl) Bootstrap(p string) error {
 	f.loaded = true
 	return nil
 }
-func (f *fakeCtl) Bootout() error { f.calls = append(f.calls, "bootout"); f.loaded = false; return nil }
+func (f *fakeCtl) Bootout(context.Context) error {
+	f.calls = append(f.calls, "bootout")
+	f.loaded = false
+	return nil
+}
 
 type daemonEnv struct {
 	dir, db, log, agent string
@@ -49,7 +57,8 @@ func stubDaemon(t *testing.T) *daemonEnv {
 		ctl:   &fakeCtl{},
 	}
 	stubStatus(t, battery.Snapshot{Percent: 67, Watts: 8.4, HasWatts: true}, e.db)
-	oldAgent, oldLog, oldCtl, oldExe, oldHome := agentPath, logPath, newCtl, executable, homeDir
+	oldAgent, oldLog, oldCtl, oldExe, oldHome, oldWoke := agentPath, logPath, newCtl, executable, homeDir, wokeAt
+	wokeAt = func() (time.Time, bool) { return time.Time{}, false }
 	agentPath = func() (string, error) { return e.agent, nil }
 	logPath = func() (string, error) { return e.log, nil }
 	newCtl = func() daemonCtl { return e.ctl }
@@ -57,7 +66,9 @@ func stubDaemon(t *testing.T) *daemonEnv {
 	homeDir = func() (string, error) { return dir, nil }
 	t.Setenv("BATLOG_HOME", "")
 	t.Setenv("XPC_SERVICE_NAME", "") // as in a terminal, not under launchd
-	t.Cleanup(func() { agentPath, logPath, newCtl, executable, homeDir = oldAgent, oldLog, oldCtl, oldExe, oldHome })
+	t.Cleanup(func() {
+		agentPath, logPath, newCtl, executable, homeDir, wokeAt = oldAgent, oldLog, oldCtl, oldExe, oldHome, oldWoke
+	})
 	return e
 }
 
@@ -84,10 +95,25 @@ func (e *daemonEnv) seedTicks(t *testing.T, ts ...int64) {
 
 func run(t *testing.T, args ...string) (string, error) {
 	t.Helper()
+	return runCtx(t, context.Background(), args...)
+}
+
+func runCtx(t *testing.T, ctx context.Context, args ...string) (string, error) {
+	t.Helper()
 	var out bytes.Buffer
 	rootCmd.SetOut(&out)
 	rootCmd.SetErr(&out)
 	rootCmd.SetArgs(args)
+	// cobra keeps each subcommand's context from its first execution; a
+	// real CLI runs once, tests run many times.
+	var setCtx func(*cobra.Command)
+	setCtx = func(c *cobra.Command) {
+		c.SetContext(ctx)
+		for _, sub := range c.Commands() {
+			setCtx(sub)
+		}
+	}
+	setCtx(rootCmd)
 	t.Cleanup(func() {
 		rootCmd.SetOut(nil)
 		rootCmd.SetErr(nil)
@@ -95,7 +121,7 @@ func run(t *testing.T, args ...string) (string, error) {
 		daemonOnce = false
 		daemonFollow = false
 	})
-	err := rootCmd.ExecuteContext(context.Background())
+	err := rootCmd.ExecuteContext(ctx)
 	return out.String(), err
 }
 
@@ -495,5 +521,101 @@ func TestStatusFollowsThePlistsBatlogHome(t *testing.T) {
 	out, _ = run(t, "daemon", "uninstall")
 	if !strings.Contains(out, "data kept at ~/elsewhere") {
 		t.Errorf("uninstall must name the daemon's data folder:\n%s", out)
+	}
+}
+
+func installedAgent(t *testing.T, e *daemonEnv, plistAge time.Duration) {
+	t.Helper()
+	bin := filepath.Join(e.dir, "bin")
+	os.WriteFile(bin, nil, 0o755)
+	os.MkdirAll(filepath.Dir(e.agent), 0o755)
+	data, _ := launchd.Plist("dev.jufi.batlog", bin, e.log, nil)
+	os.WriteFile(e.agent, data, 0o644)
+	at := testNow.Add(-plistAge)
+	os.Chtimes(e.agent, at, at)
+	e.ctl.loaded = true
+}
+
+func TestStatusNoTickLongAfterInstallIsDead(t *testing.T) {
+	// Every tick failing (no battery, ioreg broken, unwritable database)
+	// must not look like "waiting" forever.
+	e := stubDaemon(t)
+	installedAgent(t, e, 5*time.Minute)
+	out, _ := run(t, "daemon", "status")
+	if !strings.HasPrefix(out, "● batlog daemon: dead   (no tick since install 5 min ago)\nhint       check 'batlog daemon logs'") {
+		t.Errorf("status:\n%s", out)
+	}
+	js, _ := run(t, "daemon", "status", "--json")
+	if !strings.Contains(js, `"state":"dead"`) {
+		t.Errorf("json: %s", js)
+	}
+}
+
+func TestStatusJustAfterWakeIsRunning(t *testing.T) {
+	// Go's timers stop while the Mac sleeps, so the first tick after wake
+	// can be up to a minute late. That is not a dead daemon.
+	e := stubDaemon(t)
+	installedAgent(t, e, 24*time.Hour)
+	e.seedTicks(t, testNow.Unix()-8*3600)
+	wokeAt = func() (time.Time, bool) { return testNow.Add(-20 * time.Second), true }
+	out, _ := run(t, "daemon", "status")
+	if !strings.HasPrefix(out, "● batlog daemon: running   (Mac woke 20 s ago; next tick within a minute)\n") {
+		t.Errorf("status:\n%s", out)
+	}
+	if strings.Contains(out, "hint") {
+		t.Errorf("no hint after a wake:\n%s", out)
+	}
+	// Woke long ago and still no tick since: that is dead.
+	wokeAt = func() (time.Time, bool) { return testNow.Add(-7 * time.Hour), true }
+	if out, _ := run(t, "daemon", "status"); !strings.HasPrefix(out, "● batlog daemon: dead") {
+		t.Errorf("woke 7 h ago, last tick 8 h ago:\n%s", out)
+	}
+}
+
+func TestInstallStopsWhenInterrupted(t *testing.T) {
+	e := stubDaemon(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	_, err := runCtx(t, ctx, "daemon", "install")
+	if !errors.Is(err, context.Canceled) {
+		t.Errorf("err = %v, want context.Canceled", err)
+	}
+	if len(e.ctl.calls) != 0 {
+		t.Errorf("launchctl called after Ctrl-C: %v", e.ctl.calls)
+	}
+}
+
+func TestFollowResumesAfterTruncationMarker(t *testing.T) {
+	e := stubDaemon(t)
+	os.MkdirAll(filepath.Dir(e.log), 0o755)
+	var old strings.Builder
+	for i := 1; i <= 30; i++ {
+		fmt.Fprintf(&old, "old-%d\n", i)
+	}
+	os.WriteFile(e.log, []byte(old.String()), 0o644)
+	ctx, cancel := context.WithCancel(context.Background())
+	var buf syncBuffer
+	done := make(chan error, 1)
+	go func() { done <- followLog(ctx, &buf, e.log, 5*time.Millisecond) }()
+	waitFor(t, &buf, "old-30\n")
+	// What recorder.TruncateLog leaves (a shorter file), then a restart's
+	// first line.
+	os.WriteFile(e.log, []byte("old-30\n"+recorder.TruncatedMarker+"\nstarted\n"), 0o644)
+	waitFor(t, &buf, "started\n")
+	cancel()
+	<-done
+	if got := buf.String(); got != old.String()+"started\n" {
+		t.Errorf("followed = %q, want no replay of the kept tail", got)
+	}
+}
+
+func waitFor(t *testing.T, b *syncBuffer, s string) {
+	t.Helper()
+	deadline := time.Now().Add(3 * time.Second)
+	for !strings.Contains(b.String(), s) {
+		if time.Now().After(deadline) {
+			t.Fatalf("timed out waiting for %q; have %q", s, b.String())
+		}
+		time.Sleep(2 * time.Millisecond)
 	}
 }

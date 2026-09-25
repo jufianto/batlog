@@ -1,6 +1,7 @@
 package launchd
 
 import (
+	"context"
 	"errors"
 	"reflect"
 	"strings"
@@ -58,7 +59,7 @@ type fake struct {
 	out   string
 }
 
-func (f *fake) run(args ...string) ([]byte, error) {
+func (f *fake) run(_ context.Context, args ...string) ([]byte, error) {
 	f.calls = append(f.calls, args)
 	if f.fail > 0 {
 		f.fail--
@@ -68,13 +69,16 @@ func (f *fake) run(args ...string) ([]byte, error) {
 }
 
 func client(f *fake, slept *[]time.Duration) Client {
-	return Client{UID: 501, Label: "dev.jufi.batlog", Run: f.run, Sleep: func(d time.Duration) { *slept = append(*slept, d) }}
+	return Client{UID: 501, Label: "dev.jufi.batlog", Run: f.run, Sleep: func(ctx context.Context, d time.Duration) error {
+		*slept = append(*slept, d)
+		return ctx.Err()
+	}}
 }
 
 func TestBootstrapRetriesThenSucceeds(t *testing.T) {
 	f := &fake{fail: 2, out: "Bootstrap failed: 5: Input/output error"}
 	var slept []time.Duration
-	if err := client(f, &slept).Bootstrap("/p.plist"); err != nil {
+	if err := client(f, &slept).Bootstrap(context.Background(), "/p.plist"); err != nil {
 		t.Fatalf("third attempt succeeds, got %v", err)
 	}
 	want := []string{"bootstrap", "gui/501", "/p.plist"}
@@ -89,7 +93,7 @@ func TestBootstrapRetriesThenSucceeds(t *testing.T) {
 func TestBootstrapGivesUpWithLaunchctlsMessage(t *testing.T) {
 	f := &fake{fail: 99, out: "Bootstrap failed: 5: Input/output error\n"}
 	var slept []time.Duration
-	err := client(f, &slept).Bootstrap("/p.plist")
+	err := client(f, &slept).Bootstrap(context.Background(), "/p.plist")
 	if err == nil || !strings.Contains(err.Error(), "Bootstrap failed: 5: Input/output error") {
 		t.Fatalf("err = %v, want launchctl's own message", err)
 	}
@@ -102,10 +106,11 @@ func TestBootoutAndLoaded(t *testing.T) {
 	f := &fake{}
 	var slept []time.Duration
 	c := client(f, &slept)
-	if !c.Loaded() {
+	bg := context.Background()
+	if !c.Loaded(bg) {
 		t.Error("print succeeded, so the agent is loaded")
 	}
-	if err := c.Bootout(); err != nil {
+	if err := c.Bootout(bg); err != nil {
 		t.Fatal(err)
 	}
 	want := [][]string{{"print", "gui/501/dev.jufi.batlog"}, {"bootout", "gui/501/dev.jufi.batlog"}}
@@ -113,7 +118,7 @@ func TestBootoutAndLoaded(t *testing.T) {
 		t.Errorf("calls = %v, want %v", f.calls, want)
 	}
 	f.fail = 1
-	if c.Loaded() {
+	if c.Loaded(bg) {
 		t.Error("print failed, so the agent is not loaded")
 	}
 }
@@ -126,5 +131,16 @@ func TestEnvReadsTheEnvironmentBack(t *testing.T) {
 	data, _ = Plist("l", "/b", "/log", nil)
 	if env, err := Env(data); err != nil || len(env) != 0 {
 		t.Errorf("no env: Env = %v, %v", env, err)
+	}
+}
+
+func TestBootstrapStopsRetryingWhenCancelled(t *testing.T) {
+	f := &fake{fail: 99, out: "Bootstrap failed: 5: Input/output error"}
+	var slept []time.Duration
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	err := client(f, &slept).Bootstrap(ctx, "/p.plist")
+	if !errors.Is(err, context.Canceled) || len(f.calls) > 1 {
+		t.Errorf("err = %v after %d calls, want context.Canceled without retrying", err, len(f.calls))
 	}
 }
