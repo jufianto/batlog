@@ -435,6 +435,9 @@ func runRecorder(ctx context.Context, out io.Writer, once bool) error {
 
 	rec := &recorder.Recorder{DB: db, Read: readBattery, Now: now, Log: logger}
 	if once {
+		if err := rec.Start(ctx); err != nil {
+			return err
+		}
 		if err := rec.Tick(ctx); err != nil {
 			return err
 		}

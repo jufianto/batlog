@@ -51,9 +51,19 @@ func (r *Recorder) Tick(ctx context.Context) error {
 	return nil
 }
 
-// Run ticks now and then every interval until ctx is cancelled. A failed
-// tick is logged and skipped; the loop never exits on a data error.
+// Start records that this recorder process began, so history can tell a
+// gap it caused (daemon down, Mac off) from one caused by sleep.
+func (r *Recorder) Start(ctx context.Context) error {
+	return r.DB.RecordRunStart(ctx, r.Now().Unix())
+}
+
+// Run records its start, then ticks now and every interval until ctx is
+// cancelled. A failed tick is logged and skipped; the loop never exits on a
+// data error.
 func (r *Recorder) Run(ctx context.Context, every time.Duration) error {
+	if err := r.Start(ctx); err != nil && ctx.Err() == nil {
+		r.Log.Printf("could not record start: %v", err)
+	}
 	tick := func() {
 		if err := r.Tick(ctx); err != nil && ctx.Err() == nil {
 			r.Log.Printf("tick skipped: %v", err)

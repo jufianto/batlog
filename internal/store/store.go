@@ -287,3 +287,53 @@ func (d *DB) SampleStats(ctx context.Context) (count int, oldest int64, err erro
 	err = d.sql.QueryRowContext(ctx, `SELECT COUNT(*), COALESCE(MIN(ts), 0) FROM samples`).Scan(&count, &oldest)
 	return count, oldest, err
 }
+
+// RecordRunStart notes that a recorder process started at ts.
+func (d *DB) RecordRunStart(ctx context.Context, ts int64) error {
+	_, err := d.sql.ExecContext(ctx, `INSERT INTO runs(started) VALUES(?) ON CONFLICT(started) DO NOTHING`, ts)
+	return err
+}
+
+// RunStartsBetween returns recorder starts with from <= started <= to, oldest
+// first. A database from before the runs table has none.
+func (d *DB) RunStartsBetween(ctx context.Context, from, to int64) ([]int64, error) {
+	rows, err := d.sql.QueryContext(ctx, `SELECT started FROM runs WHERE started BETWEEN ? AND ? ORDER BY started`, from, to)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []int64
+	for rows.Next() {
+		var ts int64
+		if err := rows.Scan(&ts); err != nil {
+			return nil, err
+		}
+		out = append(out, ts)
+	}
+	return out, rows.Err()
+}
+
+// LastSampleBefore returns the newest sample with ts < before.
+func (d *DB) LastSampleBefore(ctx context.Context, before int64) (Sample, bool, error) {
+	return d.oneSample(ctx, `SELECT ts, pct, on_ac, charging, COALESCE(watts, 0) FROM samples
+		WHERE ts < ? ORDER BY ts DESC LIMIT 1`, before)
+}
+
+// LastSampleBeforeWithState returns the newest sample with ts < before and
+// the given on_ac: where the power-source run containing `before` began.
+func (d *DB) LastSampleBeforeWithState(ctx context.Context, before int64, onAC bool) (Sample, bool, error) {
+	return d.oneSample(ctx, `SELECT ts, pct, on_ac, charging, COALESCE(watts, 0) FROM samples
+		WHERE ts < ? AND on_ac = ? ORDER BY ts DESC LIMIT 1`, before, onAC)
+}
+
+func (d *DB) oneSample(ctx context.Context, query string, args ...any) (Sample, bool, error) {
+	var s Sample
+	err := d.sql.QueryRowContext(ctx, query, args...).Scan(&s.TS, &s.Pct, &s.OnAC, &s.Charging, &s.Watts)
+	switch {
+	case errors.Is(err, sql.ErrNoRows):
+		return Sample{}, false, nil
+	case err != nil:
+		return Sample{}, false, err
+	}
+	return s, true, nil
+}
