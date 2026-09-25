@@ -20,13 +20,13 @@ func TestPlistHasEverythingLaunchdNeeds(t *testing.T) {
 		t.Fatalf("not a valid plist: %v\n%s", err, data)
 	}
 	want := map[string]any{
-		"Label":             "dev.jufi.batlog",
-		"ProgramArguments":  []any{"/opt/bin/batlog", "daemon", "run"},
-		"RunAtLoad":         true,
-		"KeepAlive":         true,
-		"ProcessType":       "Background",
-		"StandardOutPath":   "/Users/x/Library/Logs/batlog/daemon.log",
-		"StandardErrorPath": "/Users/x/Library/Logs/batlog/daemon.log",
+		"Label":                "dev.jufi.batlog",
+		"ProgramArguments":     []any{"/opt/bin/batlog", "daemon", "run"},
+		"RunAtLoad":            true,
+		"KeepAlive":            true,
+		"ProcessType":          "Background",
+		"StandardOutPath":      "/Users/x/Library/Logs/batlog/daemon.log",
+		"StandardErrorPath":    "/Users/x/Library/Logs/batlog/daemon.log",
 		"EnvironmentVariables": map[string]any{"BATLOG_HOME": "/data"},
 	}
 	if !reflect.DeepEqual(got, want) {
