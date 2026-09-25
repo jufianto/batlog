@@ -170,3 +170,93 @@ func TestHealthSinceSkipsIncompleteRowsAndOrdersByDay(t *testing.T) {
 		}
 	}
 }
+
+func sip(v int) *int         { return &v }
+func sfp(v float64) *float64 { return &v }
+func ssp(v string) *string   { return &v }
+
+func TestWriteTickStoresSampleAndLastTick(t *testing.T) {
+	db, _ := openTemp(t)
+	ctx := context.Background()
+	if err := db.WriteTick(ctx, Tick{TS: 1000, Pct: 67, Watts: sfp(8.4), RawCurMAh: sip(3600), RawMaxMAh: sip(5424)}); err != nil {
+		t.Fatal(err)
+	}
+	// No watts or raw capacities: stored as NULL, never as 0.
+	if err := db.WriteTick(ctx, Tick{TS: 1060, Pct: 66, OnAC: true, Charging: true}); err != nil {
+		t.Fatal(err)
+	}
+	got, err := db.SamplesSince(ctx, 0)
+	if err != nil || len(got) != 2 {
+		t.Fatalf("SamplesSince = %+v, %v", got, err)
+	}
+	if got[0].Pct != 67 || got[0].Watts != 8.4 || !got[1].OnAC || !got[1].Charging {
+		t.Errorf("samples = %+v", got)
+	}
+	var nulls int
+	if err := db.sql.QueryRowContext(ctx, `SELECT COUNT(*) FROM samples WHERE ts=1060 AND watts IS NULL AND raw_cur_mah IS NULL AND raw_max_mah IS NULL`).Scan(&nulls); err != nil || nulls != 1 {
+		t.Errorf("missing values must be NULL: %d, %v", nulls, err)
+	}
+	if v, ok, err := db.Meta(ctx, "last_tick"); err != nil || !ok || v != "1060" {
+		t.Errorf("last_tick = %q %v %v", v, ok, err)
+	}
+}
+
+func TestWriteTickSameSecondTwiceIsHarmless(t *testing.T) {
+	db, _ := openTemp(t)
+	ctx := context.Background()
+	for i := 0; i < 2; i++ {
+		if err := db.WriteTick(ctx, Tick{TS: 1000, Pct: 67}); err != nil {
+			t.Fatalf("write %d: %v", i, err)
+		}
+	}
+	if n, _, _ := db.SampleStats(ctx); n != 1 {
+		t.Errorf("count = %d, want 1", n)
+	}
+}
+
+func TestWriteTickUpsertsHealthDay(t *testing.T) {
+	db, _ := openTemp(t)
+	ctx := context.Background()
+	day := func(cycles, raw int) *HealthDay {
+		return &HealthDay{Day: "2026-09-26", Cycles: sip(cycles), RawMaxMAh: sip(raw), NominalMAh: sip(5576),
+			DesignMAh: sip(6249), TempC: sfp(30.9), Condition: ssp("Normal")}
+	}
+	if err := db.WriteTick(ctx, Tick{TS: 1000, Pct: 60, Health: day(388, 5424)}); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.WriteTick(ctx, Tick{TS: 1060, Pct: 60, Health: day(389, 5435)}); err != nil {
+		t.Fatal(err)
+	}
+	var n, cycles, raw int
+	var cond string
+	if err := db.sql.QueryRowContext(ctx, `SELECT COUNT(*), MAX(cycles), MAX(raw_max_mah), MAX(condition) FROM health`).Scan(&n, &cycles, &raw, &cond); err != nil {
+		t.Fatal(err)
+	}
+	if n != 1 || cycles != 389 || raw != 5435 || cond != "Normal" {
+		t.Errorf("health rows=%d cycles=%d raw=%d cond=%q, want 1 row with the second write", n, cycles, raw, cond)
+	}
+	rows, err := db.HealthSince(ctx, "2026-09-01")
+	if err != nil || len(rows) != 1 || rows[0] != (HealthRow{"2026-09-26", 5435, 6249}) {
+		t.Errorf("HealthSince = %+v, %v", rows, err)
+	}
+}
+
+func TestMetaAndSampleStatsOnEmptyDatabase(t *testing.T) {
+	db, _ := openTemp(t)
+	ctx := context.Background()
+	if _, ok, err := db.Meta(ctx, "last_tick"); ok || err != nil {
+		t.Errorf("Meta on empty db: ok=%v err=%v", ok, err)
+	}
+	n, oldest, err := db.SampleStats(ctx)
+	if n != 0 || oldest != 0 || err != nil {
+		t.Errorf("SampleStats = %d %d %v", n, oldest, err)
+	}
+	for _, ts := range []int64{2000, 1000, 3000} {
+		if err := db.WriteTick(ctx, Tick{TS: ts, Pct: 50}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if n, oldest, _ = db.SampleStats(ctx); n != 3 || oldest != 1000 {
+		t.Errorf("SampleStats = %d %d, want 3 1000", n, oldest)
+	}
+}
