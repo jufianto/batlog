@@ -216,3 +216,57 @@ func TestPmsetEndingOnACHasNoSession(t *testing.T) {
 		t.Errorf("events = %+v", r.Events)
 	}
 }
+
+func TestStartAtTheGapsClosingSampleIsADataGap(t *testing.T) {
+	// Recorder.Start and its first tick usually land in the same second.
+	in := today()
+	in.RunStarts = []int64{at(660)}
+	if r := Build(in); !r.Sessions[1].DataGap || r.Totals.GapSec != 481*60 {
+		t.Errorf("session = %+v, totals = %+v; want a data gap", r.Sessions[1], r.Totals)
+	}
+}
+
+func TestStaleTailCountsAsNoData(t *testing.T) {
+	in := today()
+	in.To = time.Unix(at(719)+60*60, 0) // daemon silent for the last hour
+	if tot := Build(in).Totals; tot.GapSec != 60*60 {
+		t.Errorf("totals = %+v, want the silent hour as no data", tot)
+	}
+	in.To = time.Unix(at(719)+5*60, 0) // just the minute until the next tick
+	if tot := Build(in).Totals; tot.GapSec != 0 {
+		t.Errorf("totals = %+v, a fresh tail is not a gap", tot)
+	}
+}
+
+func TestPmsetOnlyWithoutADaemon(t *testing.T) {
+	in := Input{From: midnight, To: time.Unix(at(120), 0),
+		Pmset: []pmset.Reading{{TS: at(-30), OnAC: true, Pct: 80}, {TS: at(10), OnAC: false, Pct: 100}, {TS: at(100), OnAC: false, Pct: 90}}}
+	r := Build(in)
+	if len(r.Events) != 1 || len(r.Sessions) != 1 || !r.Sessions[0].Ongoing || r.Sessions[0].EndPct != 90 || r.Sessions[0].Source != SourcePmset {
+		t.Errorf("result = %+v", r)
+	}
+	if r.Lasted != nil {
+		t.Errorf("Lasted = %+v, want none without daemon data", r.Lasted)
+	}
+}
+
+func TestJustWokenTailIsSleep(t *testing.T) {
+	// Slept from the last sample at 11:59 until 20:00, read at 20:00:30,
+	// before the recorder's first tick after wake.
+	in := today()
+	in.WokeAt = at(1200)
+	in.To = time.Unix(at(1200)+30, 0)
+	r := Build(in)
+	if r.Totals.GapSec != 0 || r.Totals.SleepSec != (481+481)*60 {
+		t.Errorf("totals = %+v, want the night as sleep", r.Totals)
+	}
+	if r.Sessions[1].DataGap {
+		t.Error("a Mac that just woke is not a data gap")
+	}
+	// Awake for 20 min since then and still no tick: the daemon is down.
+	in.To = time.Unix(at(1220), 0)
+	r = Build(in)
+	if r.Totals.GapSec != 20*60 || !r.Sessions[1].DataGap {
+		t.Errorf("totals = %+v, data gap = %v", r.Totals, r.Sessions[1].DataGap)
+	}
+}

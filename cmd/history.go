@@ -79,6 +79,9 @@ func parseRange(today, week bool, since string, t time.Time) (timeRange, error) 
 	return timeRange{midnight, t, "Today, " + t.Format("Mon 02 Jan")}, nil
 }
 
+// maxSince keeps --since well inside time.Duration: a hundred years.
+var maxSince = map[string]int{"d": 36500, "h": 36500 * 24}
+
 // parseSince reads 3d, 12h or 2026-06-01 (local midnight).
 func parseSince(s string, t time.Time) (time.Time, error) {
 	var from time.Time
@@ -87,7 +90,7 @@ func parseSince(s string, t time.Time) (time.Time, error) {
 	} else {
 		unit := s[len(s)-1:]
 		v, err := strconv.Atoi(s[:len(s)-1])
-		if err != nil || v <= 0 || (unit != "d" && unit != "h") {
+		if err != nil || v <= 0 || (unit != "d" && unit != "h") || v > maxSince[unit] {
 			return time.Time{}, fmt.Errorf("--since %q: want a duration like 3d or 12h, or a date like 2026-06-01", s)
 		}
 		if unit == "d" {
@@ -104,6 +107,9 @@ func parseSince(s string, t time.Time) (time.Time, error) {
 
 func runHistory(ctx context.Context, out, errw io.Writer, rg timeRange, events, asJSON bool) error {
 	in := history.Input{From: rg.From, To: rg.To}
+	if _, woke, ok := wokeAt(); ok {
+		in.WokeAt = woke.Unix()
+	}
 	hasDB := false
 	if p, err := dbPath(); err == nil && store.Exists(p) {
 		db, err := store.Open(p, true)
@@ -136,7 +142,7 @@ func runHistory(ctx context.Context, out, errw io.Writer, rg timeRange, events, 
 		return writeHistoryJSON(out, rg, r)
 	}
 	fmt.Fprintf(out, "📅 %s\n", rg.Title)
-	if len(r.Events) == 0 && len(r.Sessions) == 0 {
+	if len(r.Events) == 0 && (events || len(r.Sessions) == 0) {
 		fmt.Fprintln(out, "no charge/discharge events in this range")
 		switch {
 		case !hasDB || in.FirstSampleTS == 0:
@@ -144,7 +150,7 @@ func runHistory(ctx context.Context, out, errw io.Writer, rg timeRange, events, 
 		case rg.From.Unix() < in.FirstSampleTS:
 			fmt.Fprintln(out, "history starts "+time.Unix(in.FirstSampleTS, 0).Format("Mon 02 Jan 15:04"))
 		}
-		if r.Totals != (history.Totals{}) {
+		if !events && r.Totals != (history.Totals{}) {
 			fmt.Fprintln(out)
 			fmt.Fprintln(out, totalsLine(r.Totals))
 		}
@@ -155,6 +161,12 @@ func runHistory(ctx context.Context, out, errw io.Writer, rg timeRange, events, 
 		return nil
 	}
 	renderHistory(out, r, rg.To)
+	fmt.Fprintln(out)
+	if in.FirstSampleTS == 0 { // pmset rows only: there are no totals
+		fmt.Fprintln(out, "no history yet: `batlog daemon install` starts recording")
+	} else {
+		fmt.Fprintln(out, totalsLine(r.Totals))
+	}
 	return nil
 }
 
@@ -245,8 +257,6 @@ func renderHistory(w io.Writer, r history.Result, t time.Time) {
 		}
 		tw.Flush()
 	}
-	fmt.Fprintln(w)
-	fmt.Fprintln(w, totalsLine(r.Totals))
 }
 
 func renderEvents(w io.Writer, events []history.Event, t time.Time) {
