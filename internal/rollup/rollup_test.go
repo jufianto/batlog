@@ -174,10 +174,9 @@ func TestDSTDays(t *testing.T) {
 		noon := time.Date(2026, c.mon, c.day, 12, 0, 0, 0, loc)
 		// On AC, one tick a minute, from two days before to two days after.
 		from, to := noon.AddDate(0, 0, -2).Add(-12*time.Hour), noon.AddDate(0, 0, 2).Add(12*time.Hour)
-		for ts := from; ts.Before(to); ts = ts.Add(time.Minute) {
-			if err := db.WriteTick(context.Background(), store.Tick{TS: ts.Unix(), Pct: 80, OnAC: true}); err != nil {
-				t.Fatal(err)
-			}
+		if err := db.Exec(context.Background(), `WITH RECURSIVE m(ts) AS (SELECT ? UNION ALL SELECT ts + 60 FROM m WHERE ts + 60 < ?)
+			INSERT INTO samples(ts, pct, on_ac, charging) SELECT ts, 80, 1, 0 FROM m`, from.Unix(), to.Unix()); err != nil {
+			t.Fatal(err)
 		}
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		res, err := Run(ctx, db, noon.AddDate(0, 0, 92))
