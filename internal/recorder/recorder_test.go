@@ -285,6 +285,10 @@ func TestTickRollsUpOnceADay(t *testing.T) {
 	if err := e.db.WriteTick(ctx, store.Tick{TS: old, Pct: 50}); err != nil {
 		t.Fatal(err)
 	}
+	// The recorder came back tonight, so June to now is a data gap, not sleep.
+	if err := e.db.RecordRunStart(ctx, time.Date(2026, 9, 26, 23, 0, 0, 0, time.Local).Unix()); err != nil {
+		t.Fatal(err)
+	}
 	calls := 0
 	e.rec.Rollup = func(ctx context.Context, db *store.DB, now time.Time) (rollup.Result, error) {
 		calls++

@@ -10,9 +10,20 @@ Implements the retention rule in [docs/specs/README.md](../../specs/README.md)
 ## What is rolled up
 
 Whole local days. The cutoff is local midnight 90 days before today; every
-day that ends at or before it is rolled up, oldest first, one transaction per
-day: upsert its `daily_rollup` row, delete its `samples` and `app_energy`
-rows. A crash leaves a day either untouched or fully rolled up.
+date from the oldest raw row's up to the cutoff is rolled up in order, one
+transaction per day: upsert its `daily_rollup` row, delete its `samples` and
+`app_energy` rows. A crash leaves a day either untouched or fully rolled up.
+
+Walking dates (not jumping from one raw row to the next) gives a day with no
+raw rows its row too: a Mac asleep all day gets `min_asleep = 1440`. A day
+with nothing known about it (inside a data gap, or already rolled up) gets
+no row.
+
+"Local midnight" is the first instant of the local date
+(`internal/localday`), not `time.Date(y, m, d, 0, 0, 0, 0, loc)`: where DST
+skips midnight (Chile, Cuba, the Azores) Go moves the missing 00:00 back into
+the day before, which once made the walk loop forever. `history`'s ranges use
+the same helper.
 
 Per day:
 

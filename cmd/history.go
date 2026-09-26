@@ -14,6 +14,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/jufianto/batlog/internal/history"
+	"github.com/jufianto/batlog/internal/localday"
 	"github.com/jufianto/batlog/internal/pmset"
 	"github.com/jufianto/batlog/internal/store"
 )
@@ -64,10 +65,10 @@ func parseRange(today, week bool, since string, t time.Time) (timeRange, error) 
 	if n > 1 {
 		return timeRange{}, errors.New("use only one of --today, --week and --since")
 	}
-	midnight := time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, t.Location())
+	midnight := localday.Start(t)
 	switch {
 	case week:
-		from := midnight.AddDate(0, 0, -6)
+		from := localday.Shift(t, -6)
 		return timeRange{from, t, "Last 7 days, " + from.Format("Mon 02 Jan") + " → " + t.Format("Mon 02 Jan")}, nil
 	case since != "":
 		from, err := parseSince(since, t)
@@ -85,8 +86,9 @@ var maxSince = map[string]int{"d": 36500, "h": 36500 * 24}
 // parseSince reads 3d, 12h or 2026-06-01 (local midnight).
 func parseSince(s string, t time.Time) (time.Time, error) {
 	var from time.Time
-	if d, err := time.ParseInLocation("2006-01-02", s, t.Location()); err == nil {
-		from = d
+	// Parsed as a bare date: in t's zone its midnight may not exist.
+	if d, err := time.Parse("2006-01-02", s); err == nil {
+		from = localday.Start(time.Date(d.Year(), d.Month(), d.Day(), 12, 0, 0, 0, t.Location()))
 	} else {
 		unit := s[len(s)-1:]
 		v, err := strconv.Atoi(s[:len(s)-1])
@@ -306,11 +308,10 @@ func totalsLine(t history.Totals) string {
 // before, and "Thu 24 Sep 15:04" further back.
 func clock(ts int64, t time.Time) string {
 	at := time.Unix(ts, 0).In(t.Location())
-	day := func(x time.Time) time.Time { return time.Date(x.Year(), x.Month(), x.Day(), 0, 0, 0, 0, x.Location()) }
-	switch d := day(t).Sub(day(at)); {
-	case d <= 0:
+	switch day, today := localday.Start(at), localday.Start(t); {
+	case !day.Before(today):
 		return at.Format("15:04")
-	case d <= 24*time.Hour+time.Hour: // a DST day is 25 h long
+	case localday.Next(day).Equal(today):
 		return at.Format("yesterday 15:04")
 	}
 	return at.Format("Mon 02 Jan 15:04")
