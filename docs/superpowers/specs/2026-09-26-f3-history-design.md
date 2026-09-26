@@ -34,7 +34,7 @@ cmd/history.go       flags, range parsing, loading, human and JSON output
 
 ## Loading
 
-Range: `--today` (default) is local midnight → now; `--week` is local midnight
+Range (`--since` at most 36 500 days or the same in hours): `--today` (default) is local midnight → now; `--week` is local midnight
 six days ago → now; `--since` takes `3d`, `12h` or `2026-06-01` (local
 midnight). More than one range flag, an unparseable or future `--since`: exit 2.
 
@@ -60,7 +60,11 @@ recorder's next start upgrades it.
   is ongoing if it is the last run. Awake minutes = its awake intervals; drain
   = percent dropped over awake intervals ÷ awake hours, shown only with at
   least 5 awake minutes. Marked `(data gap)` if a data gap falls inside it, or
-  if it is ongoing and the newest sample is more than 10 min old.
+  if it is ongoing and the recorder has been silent for more than 10 min.
+- **The tail** after the newest sample: sleep until the kernel's last wake
+  (`kern.waketime`, as in `daemon status`) if that is later, and no data from
+  then on once it is more than 10 min. So running `history` right after
+  opening the lid, before the first tick, shows the night as sleep.
 - **Headline**: first charge = first plug event in range; last on battery =
   last unplug event in range; battery lasted = the latest session if ongoing
   (`ongoing, Xh so far`), otherwise the last completed one's awake time.
@@ -81,3 +85,6 @@ durations as `4h 05m` (shared with `status`), and `(pmset)` on fallback
 rows. JSON as in the spec plus `battery_lasted {minutes, ongoing}`,
 `data_gap` per session and `totals.gap_min`; timestamps are unix seconds;
 `--events --json` is `{range, events: [{ts, type, pct, source}]}` ascending.
+`--events` with no event in the range prints the no-events message even when
+a session carries over. With pmset rows only (no daemon data) the totals line
+is replaced by the `batlog daemon install` hint.

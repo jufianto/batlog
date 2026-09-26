@@ -58,10 +58,11 @@ func stubHistory(t *testing.T, nowMin int, segs [][5]int, runs []int64, pm []pms
 		db.Close()
 	}
 	stubStatus(t, battery.Snapshot{}, f.db)
-	oldNow, oldPm := now, readPmset
+	oldNow, oldPm, oldWoke := now, readPmset, wokeAt
 	now = func() time.Time { return time.Unix(histAt(nowMin), 0) }
 	readPmset = func(context.Context) ([]pmset.Reading, error) { f.pmsetRuns++; return pm, pmErr }
-	t.Cleanup(func() { now, readPmset = oldNow, oldPm })
+	wokeAt = func() (time.Time, time.Time, bool) { return time.Time{}, time.Time{}, false }
+	t.Cleanup(func() { now, readPmset, wokeAt = oldNow, oldPm, oldWoke })
 	return f
 }
 
@@ -317,6 +318,62 @@ func TestHistorySessionFromTheFirstSampleEver(t *testing.T) {
 	stubHistory(t, 119, [][5]int{{-50, 60, 100, 90, 0}, {60, 120, 90, 100, 1}}, nil, nil, nil)
 	got, _ := run(t, "history")
 	if !strings.Contains(got, "  yesterday 23:10 → 01:00   1h 50m awake   100% → 90%   5.5 %/hr\n") {
+		t.Errorf("got\n%s", got)
+	}
+}
+
+func TestHistoryEventsSaysSoWhenThereAreNone(t *testing.T) {
+	// On battery since yesterday: a session today, but no event.
+	stubHistory(t, 119, [][5]int{{-60, -50, 100, 100, 1}, {-50, 120, 100, 80, 0}}, nil, nil, nil)
+	got, _ := run(t, "history", "--events")
+	if got != "📅 Today, Sat 26 Sep\nno charge/discharge events in this range\n" {
+		t.Errorf("got\n%s", got)
+	}
+}
+
+func TestHistoryPmsetBeforeInstall(t *testing.T) {
+	f := stubHistory(t, 120, nil, nil, []pmset.Reading{
+		{TS: histAt(-30), OnAC: true, Pct: 80}, {TS: histAt(10), OnAC: false, Pct: 100}, {TS: histAt(100), OnAC: false, Pct: 90},
+	}, nil)
+	got, err := run(t, "history")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if f.pmsetRuns != 1 || !strings.Contains(got, "last on battery    00:10  (at 100%)  (pmset)") ||
+		!strings.Contains(got, "  00:10 → now   —   100% → 90%      (ongoing) (pmset)\n") ||
+		!strings.HasSuffix(got, "\nno history yet: `batlog daemon install` starts recording\n") {
+		t.Errorf("pmset ran %d times; got\n%s", f.pmsetRuns, got)
+	}
+}
+
+func TestHistoryRunStartBeforeTheRange(t *testing.T) {
+	// Went on battery 23:10, daemon restarted 23:50 inside the gap that
+	// crosses midnight: the session still carries (data gap).
+	stubHistory(t, 119, [][5]int{{-60, -50, 100, 100, 1}, {-50, -30, 100, 98, 0}, {60, 120, 97, 94, 0}},
+		[]int64{histAt(-10)}, nil, nil)
+	got, _ := run(t, "history")
+	if !strings.Contains(got, "(ongoing) (data gap)") {
+		t.Errorf("got\n%s", got)
+	}
+}
+
+func TestHistorySinceTooFarBack(t *testing.T) {
+	stubHistory(t, 600, nil, nil, nil, nil)
+	for _, v := range []string{"3000000h", "99999999999999d", "36501d"} {
+		_, err := run(t, "history", "--since", v)
+		if err == nil || !strings.Contains(err.Error(), "want a duration") {
+			t.Errorf("--since %s: err = %v, want the usage message", v, err)
+		}
+	}
+}
+
+func TestHistoryUsesTheWakeTime(t *testing.T) {
+	stubHistory(t, 1200, daySegs, nil, nil, nil)
+	wokeAt = func() (time.Time, time.Time, bool) {
+		return time.Unix(histAt(720), 0), time.Unix(histAt(1199), 0), true
+	}
+	got, _ := run(t, "history")
+	if strings.Contains(got, "data gap") || !strings.Contains(got, "asleep 16h") {
 		t.Errorf("got\n%s", got)
 	}
 }

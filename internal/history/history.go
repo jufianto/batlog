@@ -5,7 +5,6 @@ package history
 
 import (
 	"math"
-	"sort"
 	"time"
 
 	"github.com/jufianto/batlog/internal/pmset"
@@ -38,6 +37,8 @@ type Input struct {
 	Pmset []pmset.Reading
 	// FirstSampleTS is the daemon's first sample ever, 0 when there is none.
 	FirstSampleTS int64
+	// WokeAt is the last wake from sleep, 0 when unknown.
+	WokeAt int64
 }
 
 // Event is a change of power source.
@@ -99,7 +100,7 @@ func Build(in Input) Result {
 	r.Sessions = append(r.Sessions, sessions...)
 	r.Totals = totals
 
-	sort.SliceStable(r.Events, func(i, j int) bool { return r.Events[i].TS < r.Events[j].TS })
+	// Already ascending: pmset events are all before the first sample.
 	for i := range r.Events {
 		e := &r.Events[i]
 		if e.Plugged && r.FirstCharge == nil {
@@ -179,12 +180,22 @@ func fromSamples(in Input, from, to int64) ([]Event, []Session, Totals) {
 			tot.SleepSec += clipped
 		}
 	}
-	if cur != nil {
-		last := ss[len(ss)-1]
-		if to-last.TS > staleAfter {
-			cur.DataGap = true
+	if n := len(ss); n > 0 {
+		// After the last sample the Mac slept until it woke; a recorder
+		// silent for longer than that is down.
+		last, tail := ss[n-1], ss[n-1].TS
+		if in.WokeAt > tail {
+			tot.SleepSec += overlap(tail, in.WokeAt, from, to)
+			tail = in.WokeAt
 		}
-		closeRun(0, last.Pct, true)
+		stale := to-tail > staleAfter
+		if stale {
+			tot.GapSec += overlap(tail, to, from, to)
+		}
+		if cur != nil {
+			cur.DataGap = cur.DataGap || stale
+			closeRun(0, last.Pct, true)
+		}
 	}
 	return events, sessions, tot
 }
