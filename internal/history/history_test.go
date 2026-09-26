@@ -94,7 +94,9 @@ func TestSleepGapDoesNotInflateBatteryLife(t *testing.T) {
 
 func TestTotalsAreClippedToTheRange(t *testing.T) {
 	tot := Build(today()).Totals
-	want := Totals{BatterySec: (60 + 118) * 60, ACSec: 60 * 60, SleepSec: 481 * 60}
+	// Percent used: 95 → 90 after midnight (100 → 95 was yesterday), then
+	// 5 + 6 awake; the 1 % lost asleep is not counted.
+	want := Totals{BatterySec: (60 + 118) * 60, ACSec: 60 * 60, SleepSec: 481 * 60, PctUsed: 5 + 11}
 	if tot != want {
 		t.Errorf("totals = %+v, want %+v", tot, want)
 	}

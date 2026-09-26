@@ -13,6 +13,7 @@ import (
 
 	"github.com/jufianto/batlog/internal/battery"
 	"github.com/jufianto/batlog/internal/health"
+	"github.com/jufianto/batlog/internal/rollup"
 	"github.com/jufianto/batlog/internal/store"
 )
 
@@ -25,13 +26,15 @@ type Recorder struct {
 	Read func(context.Context) (battery.Snapshot, error)
 	Now  func() time.Time
 	Log  *log.Logger
+	// Rollup prunes raw rows older than 90 days; nil means rollup.Run.
+	Rollup func(context.Context, *store.DB, time.Time) (rollup.Result, error)
 
 	lastHealthDay string // local date of the last health row this process wrote
 }
 
 // Tick reads the battery and writes one sample. The first successful tick of
 // each local calendar day, and the first after the process starts, also
-// writes that day's health row.
+// writes that day's health row and rolls up raw rows older than 90 days.
 func (r *Recorder) Tick(ctx context.Context) error {
 	pctx, cancel := context.WithTimeout(ctx, probeTimeout)
 	defer cancel()
@@ -47,8 +50,27 @@ func (r *Recorder) Tick(ctx context.Context) error {
 	}
 	if withHealth {
 		r.lastHealthDay = day
+		r.rollup(ctx, now)
 	}
 	return nil
+}
+
+// rollup logs what it did; a failure never fails the tick.
+func (r *Recorder) rollup(ctx context.Context, now time.Time) {
+	run := r.Rollup
+	if run == nil {
+		run = rollup.Run
+	}
+	res, err := run(ctx, r.DB, now)
+	switch {
+	case res.Days == 1:
+		r.Log.Printf("rolled up 1 day (%s)", res.First)
+	case res.Days > 1:
+		r.Log.Printf("rolled up %d days (%s → %s)", res.Days, res.First, res.Last)
+	}
+	if err != nil && ctx.Err() == nil {
+		r.Log.Printf("rollup failed: %v", err)
+	}
 }
 
 // Start records that this recorder process began, so history can tell a

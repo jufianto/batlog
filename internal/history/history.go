@@ -71,9 +71,11 @@ type Lasted struct {
 	Ongoing bool
 }
 
-// Totals are batlog intervals clipped to the range, in seconds.
+// Totals are batlog intervals clipped to the range, in seconds, and the
+// percent dropped over awake on-battery intervals that start in the range.
 type Totals struct {
 	BatterySec, ACSec, SleepSec, GapSec int64
+	PctUsed                             int
 }
 
 // Result is the history of one range.
@@ -171,6 +173,9 @@ func fromSamples(in Input, from, to int64) ([]Event, []Session, Totals) {
 			tot.BatterySec += clipped
 			awake += dt
 			drop += s.Pct - next.Pct
+			if s.TS >= from && s.TS < to {
+				tot.PctUsed += s.Pct - next.Pct
+			}
 		case startInside(in.RunStarts, s.TS, next.TS):
 			tot.GapSec += clipped
 			if cur != nil {
