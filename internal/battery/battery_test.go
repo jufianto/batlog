@@ -40,6 +40,26 @@ func TestParseAppleSilicon(t *testing.T) {
 	}
 }
 
+func TestParseAppleSiliconOnBattery(t *testing.T) {
+	// Real capture while discharging: Amperage is negative (-1533 mA).
+	s, err := Parse(fixture(t, "Mac16,8-15.7.3-battery.plist"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if s.Percent != 69 || s.OnAC || s.Charging || s.FullyCharged {
+		t.Errorf("Percent/OnAC/Charging/FullyCharged = %d/%v/%v/%v, want 69/false/false/false", s.Percent, s.OnAC, s.Charging, s.FullyCharged)
+	}
+	if !s.HasWatts || math.Abs(s.Watts-18.145) > 0.001 {
+		t.Errorf("Watts = %v (has=%v), want 18.145 (11836 mV × |-1533| mA / 1e6)", s.Watts, s.HasWatts)
+	}
+	if !s.HasMacOSMinutes || s.MacOSMinutes != 119 {
+		t.Errorf("MacOSMinutes = %d (has=%v), want 119", s.MacOSMinutes, s.HasMacOSMinutes)
+	}
+	if s.RawCurrentMAh != 3593 || s.RawMaxMAh != 5447 {
+		t.Errorf("raw mAh = %d/%d, want 3593/5447", s.RawCurrentMAh, s.RawMaxMAh)
+	}
+}
+
 func TestParseIntelUsesRawMilliampHours(t *testing.T) {
 	s, err := Parse(fixture(t, "intel-synthetic.plist"))
 	if err != nil {
@@ -121,6 +141,8 @@ func TestParseHealthFields(t *testing.T) {
 	}{
 		{"Mac16,8-15.7.3.plist", Health{Cycles: intp(388), DesignMAh: intp(6249), RawMaxMAh: intp(5424), NominalMAh: intp(5576),
 			TempC: f64p(30.91), VoltageV: f64p(13.1), FailureStatus: intp(0)}},
+		{"Mac16,8-15.7.3-battery.plist", Health{Cycles: intp(389), DesignMAh: intp(6249), RawMaxMAh: intp(5447), NominalMAh: intp(5599),
+			TempC: f64p(31.11), VoltageV: f64p(11.836), FailureStatus: intp(0)}},
 		{"intel-nominal-synthetic.plist", Health{Cycles: intp(512), DesignMAh: intp(5800), RawMaxMAh: intp(5100), NominalMAh: intp(4950),
 			TempC: f64p(30.12), VoltageV: f64p(11.8), FailureStatus: intp(4)}},
 		// No NominalChargeCapacity and no PermanentFailureStatus: both stay nil.
