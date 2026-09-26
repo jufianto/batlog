@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 	"time"
+	_ "time/tzdata"
 
 	"github.com/jufianto/batlog/internal/battery"
 	"github.com/jufianto/batlog/internal/pmset"
@@ -375,5 +376,34 @@ func TestHistoryUsesTheWakeTime(t *testing.T) {
 	got, _ := run(t, "history")
 	if strings.Contains(got, "data gap") || !strings.Contains(got, "asleep 16h") {
 		t.Errorf("got\n%s", got)
+	}
+}
+
+func TestHistoryRangesWhereDSTSkipsMidnight(t *testing.T) {
+	loc, err := time.LoadLocation("America/Santiago") // 6 Sep 2026 starts at 01:00
+	if err != nil {
+		t.Fatal(err)
+	}
+	day1 := time.Date(2026, 9, 6, 1, 0, 0, 0, loc)
+	for _, c := range []struct {
+		n            time.Time
+		week         bool
+		since, title string
+	}{
+		{time.Date(2026, 9, 6, 14, 30, 0, 0, loc), false, "", "Today, Sun 06 Sep"},
+		{time.Date(2026, 9, 12, 14, 30, 0, 0, loc), true, "", "Last 7 days, Sun 06 Sep → Sat 12 Sep"},
+		{time.Date(2026, 9, 12, 14, 30, 0, 0, loc), false, "2026-09-06", "Since Sun 06 Sep 01:00"},
+	} {
+		rg, err := parseRange(false, c.week, c.since, c.n)
+		if err != nil || !rg.From.Equal(day1) || rg.Title != c.title {
+			t.Errorf("week=%v since=%q: from %s title %q (%v), want %s", c.week, c.since, rg.From, rg.Title, err, day1)
+		}
+	}
+	// 01:30 on 6 Sep is "yesterday" on the 7th, not two days back.
+	if got := clock(time.Date(2026, 9, 6, 1, 30, 0, 0, loc).Unix(), time.Date(2026, 9, 7, 9, 0, 0, 0, loc)); got != "yesterday 01:30" {
+		t.Errorf("clock = %q", got)
+	}
+	if got := clock(time.Date(2026, 9, 5, 23, 30, 0, 0, loc).Unix(), time.Date(2026, 9, 7, 9, 0, 0, 0, loc)); got != "Sat 05 Sep 23:30" {
+		t.Errorf("clock = %q", got)
 	}
 }
