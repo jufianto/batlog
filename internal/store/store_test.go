@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -411,5 +412,73 @@ func TestRunStartsOnASchemaOneDatabase(t *testing.T) {
 	got, err := ro.RunStartsBetween(ctx, 0, 1<<40)
 	if err != nil || got != nil {
 		t.Errorf("RunStartsBetween = %v, %v; want none from a database before the runs table", got, err)
+	}
+}
+
+func TestRollupStorage(t *testing.T) {
+	db, _ := openTemp(t)
+	ctx := context.Background()
+	for _, tk := range []Tick{{TS: 100, Pct: 90}, {TS: 160, Pct: 89, OnAC: true}, {TS: 220, Pct: 89}, {TS: 280, Pct: 88}} {
+		if err := db.WriteTick(ctx, tk); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, e := range [][]any{{100, "Brave", 2.5}, {160, "Brave", 1.5}, {160, "Slack", 1.0}, {280, "Brave", 9.0}} {
+		if err := db.Exec(ctx, `INSERT INTO app_energy(ts, app, energy) VALUES(?,?,?)`, e...); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if ts, err := db.OldestRawTS(ctx); err != nil || ts != 100 {
+		t.Errorf("OldestRawTS = %d, %v", ts, err)
+	}
+	ss, err := db.SamplesBetween(ctx, 100, 220)
+	if err != nil || len(ss) != 2 || ss[1].TS != 160 || !ss[1].OnAC {
+		t.Errorf("SamplesBetween = %+v, %v", ss, err)
+	}
+	if s, ok, err := db.FirstSampleFrom(ctx, 161); err != nil || !ok || s.TS != 220 {
+		t.Errorf("FirstSampleFrom = %+v %v %v", s, ok, err)
+	}
+	sums, err := db.EnergySums(ctx, 100, 220)
+	if err != nil || len(sums) != 2 || sums["Brave"] != 4.0 || sums["Slack"] != 1.0 {
+		t.Errorf("EnergySums = %v, %v", sums, err)
+	}
+
+	if _, ok, err := db.RollupCarry(ctx); ok || err != nil {
+		t.Errorf("carry before any rollup: %v %v", ok, err)
+	}
+	day := RollupDay{Day: "1970-01-01", MinBattery: 2, MinAC: 1, MinAsleep: 0, PctConsumed: 1, AppEnergy: sums}
+	if err := db.WriteRollup(ctx, day, 100, 220, Sample{TS: 160, Pct: 89, OnAC: true}); err != nil {
+		t.Fatal(err)
+	}
+	if ss, _ := db.SamplesBetween(ctx, 0, 1000); len(ss) != 2 || ss[0].TS != 220 {
+		t.Errorf("samples left = %+v, want 220 and 280", ss)
+	}
+	if sums, _ := db.EnergySums(ctx, 0, 1000); len(sums) != 1 || sums["Brave"] != 9.0 {
+		t.Errorf("app_energy left = %v", sums)
+	}
+	if c, ok, err := db.RollupCarry(ctx); err != nil || !ok || c != (Sample{TS: 160, Pct: 89, OnAC: true}) {
+		t.Errorf("carry = %+v %v %v", c, ok, err)
+	}
+
+	// The same day again merges instead of replacing.
+	more := RollupDay{Day: "1970-01-01", MinBattery: 3, MinAsleep: 4, PctConsumed: 2, AppEnergy: map[string]float64{"Brave": 1, "Zoom": 2}}
+	if err := db.WriteRollup(ctx, more, 220, 280, Sample{TS: 220, Pct: 89}); err != nil {
+		t.Fatal(err)
+	}
+	got, ok, err := db.Rollup(ctx, "1970-01-01")
+	want := RollupDay{Day: "1970-01-01", MinBattery: 5, MinAC: 1, MinAsleep: 4, PctConsumed: 3,
+		AppEnergy: map[string]float64{"Brave": 5, "Slack": 1, "Zoom": 2}}
+	if err != nil || !ok || fmt.Sprint(got) != fmt.Sprint(want) {
+		t.Errorf("Rollup = %+v, want %+v (%v)", got, want, err)
+	}
+	// An older carry never replaces a newer one.
+	if err := db.WriteRollup(ctx, RollupDay{Day: "1969-12-31"}, 0, 50, Sample{TS: 40}); err != nil {
+		t.Fatal(err)
+	}
+	if c, _, _ := db.RollupCarry(ctx); c.TS != 220 {
+		t.Errorf("carry = %+v, want 220 kept", c)
+	}
+	if r, ok, _ := db.Rollup(ctx, "1969-12-31"); !ok || r.AppEnergy != nil {
+		t.Errorf("empty day = %+v %v, want a row with NULL app_energy", r, ok)
 	}
 }
