@@ -6,6 +6,7 @@ import (
 	"context"
 	"database/sql"
 	"embed"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -13,6 +14,7 @@ import (
 	"os"
 	"sort"
 	"strconv"
+	"strings"
 
 	_ "modernc.org/sqlite"
 )
@@ -341,4 +343,176 @@ func (d *DB) oneSample(ctx context.Context, query string, args ...any) (Sample, 
 		return Sample{}, false, err
 	}
 	return s, true, nil
+}
+
+// SamplesBetween returns samples with from <= ts < to, oldest first.
+func (d *DB) SamplesBetween(ctx context.Context, from, to int64) ([]Sample, error) {
+	rows, err := d.sql.QueryContext(ctx,
+		`SELECT ts, pct, on_ac, charging, COALESCE(watts, 0) FROM samples WHERE ts >= ? AND ts < ? ORDER BY ts`, from, to)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []Sample
+	for rows.Next() {
+		var s Sample
+		if err := rows.Scan(&s.TS, &s.Pct, &s.OnAC, &s.Charging, &s.Watts); err != nil {
+			return nil, err
+		}
+		out = append(out, s)
+	}
+	return out, rows.Err()
+}
+
+// FirstSampleFrom returns the oldest sample with ts >= from.
+func (d *DB) FirstSampleFrom(ctx context.Context, from int64) (Sample, bool, error) {
+	return d.oneSample(ctx, `SELECT ts, pct, on_ac, charging, COALESCE(watts, 0) FROM samples
+		WHERE ts >= ? ORDER BY ts LIMIT 1`, from)
+}
+
+// OldestRawTS is the oldest ts in samples or app_energy, 0 when both are empty.
+func (d *DB) OldestRawTS(ctx context.Context) (int64, error) {
+	var ts int64
+	err := d.sql.QueryRowContext(ctx, `SELECT COALESCE(MIN(ts), 0) FROM (
+		SELECT MIN(ts) AS ts FROM samples UNION ALL SELECT MIN(ts) FROM app_energy)`).Scan(&ts)
+	return ts, err
+}
+
+// EnergySums adds up each app's energy over from <= ts < to.
+func (d *DB) EnergySums(ctx context.Context, from, to int64) (map[string]float64, error) {
+	rows, err := d.sql.QueryContext(ctx,
+		`SELECT app, SUM(energy) FROM app_energy WHERE ts >= ? AND ts < ? GROUP BY app`, from, to)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := map[string]float64{}
+	for rows.Next() {
+		var app string
+		var e float64
+		if err := rows.Scan(&app, &e); err != nil {
+			return nil, err
+		}
+		out[app] = e
+	}
+	return out, rows.Err()
+}
+
+// RollupDay is one daily_rollup row. AppEnergy is nil when the day had no
+// app_energy rows.
+type RollupDay struct {
+	Day                          string
+	MinBattery, MinAC, MinAsleep int
+	PctConsumed                  float64
+	AppEnergy                    map[string]float64
+}
+
+// WriteRollup stores a day's rollup, merging into an existing row, and
+// deletes its raw rows (from <= ts < to), in one transaction. carry is the
+// newest sample deleted; it is kept in meta as the next day's lead-in unless
+// a newer one is already there.
+func (d *DB) WriteRollup(ctx context.Context, r RollupDay, from, to int64, carry Sample) error {
+	tx, err := d.sql.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	old, ok, err := scanRollup(tx.QueryRowContext(ctx, rollupSelect, r.Day))
+	if err != nil {
+		return fmt.Errorf("read rollup: %w", err)
+	}
+	if ok {
+		r.MinBattery += old.MinBattery
+		r.MinAC += old.MinAC
+		r.MinAsleep += old.MinAsleep
+		r.PctConsumed += old.PctConsumed
+		if old.AppEnergy != nil {
+			merged := map[string]float64{}
+			for app, e := range old.AppEnergy {
+				merged[app] += e
+			}
+			for app, e := range r.AppEnergy {
+				merged[app] += e
+			}
+			r.AppEnergy = merged
+		}
+	}
+	var apps *string
+	if r.AppEnergy != nil {
+		b, err := json.Marshal(r.AppEnergy)
+		if err != nil {
+			return err
+		}
+		v := string(b)
+		apps = &v
+	}
+	if _, err := tx.ExecContext(ctx,
+		`INSERT INTO daily_rollup(day, min_battery, min_ac, min_asleep, pct_consumed, app_energy)
+		 VALUES(?,?,?,?,?,?)
+		 ON CONFLICT(day) DO UPDATE SET min_battery = excluded.min_battery, min_ac = excluded.min_ac,
+		   min_asleep = excluded.min_asleep, pct_consumed = excluded.pct_consumed, app_energy = excluded.app_energy`,
+		r.Day, r.MinBattery, r.MinAC, r.MinAsleep, r.PctConsumed, apps); err != nil {
+		return fmt.Errorf("write rollup: %w", err)
+	}
+	for _, table := range []string{"samples", "app_energy"} {
+		if _, err := tx.ExecContext(ctx, `DELETE FROM `+table+` WHERE ts >= ? AND ts < ?`, from, to); err != nil {
+			return fmt.Errorf("prune %s: %w", table, err)
+		}
+	}
+	if carry.TS != 0 {
+		if _, err := tx.ExecContext(ctx,
+			`INSERT INTO meta(key, value) VALUES('rollup_carry', ?)
+			 ON CONFLICT(key) DO UPDATE SET value = excluded.value
+			 WHERE CAST(substr(meta.value, 1, instr(meta.value, ',') - 1) AS INTEGER) < ?`,
+			fmt.Sprintf("%d,%d,%t", carry.TS, carry.Pct, carry.OnAC), carry.TS); err != nil {
+			return fmt.Errorf("write rollup carry: %w", err)
+		}
+	}
+	return tx.Commit()
+}
+
+// RollupCarry reads the sample the last rollup kept as a lead-in.
+func (d *DB) RollupCarry(ctx context.Context) (Sample, bool, error) {
+	v, ok, err := d.Meta(ctx, "rollup_carry")
+	if err != nil || !ok {
+		return Sample{}, false, err
+	}
+	f := strings.Split(v, ",")
+	if len(f) != 3 {
+		return Sample{}, false, fmt.Errorf("rollup_carry %q: want ts,pct,on_ac", v)
+	}
+	ts, err1 := strconv.ParseInt(f[0], 10, 64)
+	pct, err2 := strconv.Atoi(f[1])
+	onAC, err3 := strconv.ParseBool(f[2])
+	if err := errors.Join(err1, err2, err3); err != nil {
+		return Sample{}, false, fmt.Errorf("rollup_carry %q: %w", v, err)
+	}
+	return Sample{TS: ts, Pct: pct, OnAC: onAC}, true, nil
+}
+
+const rollupSelect = `SELECT day, min_battery, min_ac, min_asleep, COALESCE(pct_consumed, 0), app_energy
+	FROM daily_rollup WHERE day = ?`
+
+// Rollup reads one day's rollup row.
+func (d *DB) Rollup(ctx context.Context, day string) (RollupDay, bool, error) {
+	return scanRollup(d.sql.QueryRowContext(ctx, rollupSelect, day))
+}
+
+func scanRollup(row *sql.Row) (RollupDay, bool, error) {
+	var r RollupDay
+	var apps sql.NullString
+	err := row.Scan(&r.Day, &r.MinBattery, &r.MinAC, &r.MinAsleep, &r.PctConsumed, &apps)
+	switch {
+	case errors.Is(err, sql.ErrNoRows):
+		return RollupDay{}, false, nil
+	case err != nil:
+		return RollupDay{}, false, err
+	}
+	if apps.Valid {
+		if err := json.Unmarshal([]byte(apps.String), &r.AppEnergy); err != nil {
+			return RollupDay{}, false, fmt.Errorf("rollup %s app_energy: %w", r.Day, err)
+		}
+	}
+	return r, true, nil
 }

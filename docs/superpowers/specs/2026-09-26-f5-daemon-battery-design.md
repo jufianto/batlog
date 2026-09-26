@@ -17,7 +17,8 @@ day, and `meta.last_tick`; log truncation at startup.
 Deferred, with reasons:
 - **`app_energy` rows** — spike verdict pending (~2026-09-28).
 - **90-day rollup and prune** — needs the session logic F3 builds, and no raw
-  row can be 90 days old before 2026-12-25. Tracked for F3.
+  row can be 90 days old before 2026-12-25. Built after F3: see
+  [the rollup design](2026-09-26-rollup-design.md).
 
 ## Packages
 

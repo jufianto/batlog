@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/jufianto/batlog/internal/battery"
+	"github.com/jufianto/batlog/internal/rollup"
 	"github.com/jufianto/batlog/internal/store"
 )
 
@@ -274,5 +275,53 @@ func TestRunRecordsItsStart(t *testing.T) {
 	}
 	if _, oldest, _ := e.db.SampleStats(context.Background()); starts[0] > oldest {
 		t.Errorf("start %d recorded after the first tick %d", starts[0], oldest)
+	}
+}
+
+func TestTickRollsUpOnceADay(t *testing.T) {
+	e := newEnv(t)
+	ctx := context.Background()
+	old := time.Date(2026, 6, 1, 12, 0, 0, 0, time.Local).Unix()
+	if err := e.db.WriteTick(ctx, store.Tick{TS: old, Pct: 50}); err != nil {
+		t.Fatal(err)
+	}
+	calls := 0
+	e.rec.Rollup = func(ctx context.Context, db *store.DB, now time.Time) (rollup.Result, error) {
+		calls++
+		return rollup.Run(ctx, db, now)
+	}
+	for i := 0; i < 3; i++ { // 23:59, 00:00 (a new day), 00:01
+		if err := e.rec.Tick(ctx); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if calls != 2 {
+		t.Errorf("rollup ran %d times, want on the first tick and the first of the new day", calls)
+	}
+	if _, ok, _ := e.db.Rollup(ctx, "2026-06-01"); !ok {
+		t.Error("1 Jun was not rolled up")
+	}
+	if ts, _ := e.db.OldestRawTS(ctx); ts == old {
+		t.Error("1 Jun's sample was not pruned")
+	}
+	if got := e.logs.String(); got != "rolled up 1 day (2026-06-01)\n" {
+		t.Errorf("log = %q", got)
+	}
+}
+
+func TestRollupFailureDoesNotSkipTheTick(t *testing.T) {
+	e := newEnv(t)
+	e.rec.Rollup = func(context.Context, *store.DB, time.Time) (rollup.Result, error) {
+		return rollup.Result{Days: 2, First: "2026-06-01", Last: "2026-06-02"}, errors.New("disk I/O error")
+	}
+	if err := e.rec.Tick(context.Background()); err != nil {
+		t.Fatalf("tick = %v, want the sample written anyway", err)
+	}
+	if n, _, _ := e.db.SampleStats(context.Background()); n != 1 {
+		t.Errorf("samples = %d, want 1", n)
+	}
+	want := "rolled up 2 days (2026-06-01 → 2026-06-02)\nrollup failed: disk I/O error\n"
+	if got := e.logs.String(); got != want {
+		t.Errorf("log = %q, want %q", got, want)
 	}
 }
