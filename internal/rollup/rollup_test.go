@@ -48,8 +48,7 @@ func fixture(t *testing.T) *store.DB {
 	seed(t, db, local(9, 30, 8, 0), local(9, 30, 9, 0), 38, 45, true)
 	seed(t, db, local(10, 1, 10, 0), local(10, 1, 10, 5), 60, 61, true)
 	for i, e := range []float64{3, 2} {
-		if err := db.Exec(ctx, `INSERT INTO app_energy(ts, app, energy) VALUES(?, 'Brave', ?)`,
-			local(9, 29, 22, i).Unix(), e); err != nil {
+		if err := db.AddEnergy(ctx, local(9, 29, 22, i).Unix(), []store.EnergyDelta{{App: "Brave", CPU: uint64(e * 1e9)}}); err != nil {
 			t.Fatal(err)
 		}
 	}

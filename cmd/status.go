@@ -10,6 +10,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/jufianto/batlog/internal/battery"
+	"github.com/jufianto/batlog/internal/energy"
 	"github.com/jufianto/batlog/internal/paths"
 	"github.com/jufianto/batlog/internal/status"
 	"github.com/jufianto/batlog/internal/store"
@@ -18,6 +19,7 @@ import (
 // Swapped by tests so nothing shells out or touches the real data directory.
 var (
 	readBattery = battery.Read
+	readEnergy  = energy.Read
 	dbPath      = paths.DB
 	now         = time.Now
 )
@@ -59,7 +61,7 @@ func runStatus(ctx context.Context, out, errw io.Writer, asJSON bool) error {
 				fmt.Fprintf(errw, "warning: reading samples: %v\n", err)
 				samples = nil
 			}
-			if energy, err = db.EnergySince(ctx, since); err != nil {
+			if energy, err = db.EnergySince(ctx, status.EnergyFrom(t)); err != nil {
 				fmt.Fprintf(errw, "warning: reading app energy: %v\n", err)
 				energy = nil
 			}

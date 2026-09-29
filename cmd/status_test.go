@@ -59,12 +59,16 @@ func seededDB(t *testing.T) string {
 			t.Fatal(err)
 		}
 	}
-	for i, e := range []struct {
+	for _, e := range []struct {
+		ago time.Duration
 		app string
-		en  float64
-	}{{"Google Chrome", 30}, {"Code", 20}, {"Google Chrome", 8}} {
-		// Distinct ts per row: (ts, app) is the primary key.
-		if err := db.Exec(ctx, `INSERT INTO app_energy(ts,app,energy) VALUES(?,?,?)`, testNow.Unix()-int64(60*i), e.app, e.en); err != nil {
+		j   float64
+	}{
+		{0, "Google Chrome", 30}, {time.Minute, "Code", 20}, {2 * time.Minute, "Google Chrome", 8},
+		{30 * time.Minute, "Code", 100}, // two buckets back: too old for "worst now"
+	} {
+		d := []store.EnergyDelta{{App: e.app, CPU: uint64(e.j * 1e9)}}
+		if err := db.AddEnergy(ctx, testNow.Add(-e.ago).Unix(), d); err != nil {
 			t.Fatal(err)
 		}
 	}

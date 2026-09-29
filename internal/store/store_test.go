@@ -26,7 +26,7 @@ func openTemp(t *testing.T) (*DB, string) {
 func TestMigrateCreatesSchemaAndIsIdempotent(t *testing.T) {
 	db, _ := openTemp(t)
 	ctx := context.Background()
-	for _, table := range []string{"samples", "app_energy", "health", "meta", "daily_rollup"} {
+	for _, table := range []string{"samples", "apps", "app_energy", "health", "meta", "daily_rollup", "runs"} {
 		if err := db.Exec(ctx, "SELECT 1 FROM "+table+" LIMIT 1"); err != nil {
 			t.Errorf("table %s missing: %v", table, err)
 		}
@@ -35,8 +35,8 @@ func TestMigrateCreatesSchemaAndIsIdempotent(t *testing.T) {
 		t.Fatalf("second Migrate must be a no-op, got %v", err)
 	}
 	var v string
-	if err := db.sql.QueryRowContext(ctx, "SELECT value FROM meta WHERE key='schema_version'").Scan(&v); err != nil || v != "2" {
-		t.Fatalf("schema_version = %q, %v; want \"1\"", v, err)
+	if err := db.sql.QueryRowContext(ctx, "SELECT value FROM meta WHERE key='schema_version'").Scan(&v); err != nil || v != "3" {
+		t.Fatalf("schema_version = %q, %v; want \"3\"", v, err)
 	}
 }
 
@@ -66,20 +66,99 @@ func TestSamplesSinceReturnsOrderedRowsInWindow(t *testing.T) {
 	}
 }
 
-func TestEnergySince(t *testing.T) {
+func TestBucket(t *testing.T) {
+	for ts, want := range map[int64]int64{0: 0, 899: 0, 900: 900, -1: -900, 1_759_000_123: 1_758_999_600} {
+		if got := Bucket(ts); got != want {
+			t.Errorf("Bucket(%d) = %d, want %d", ts, got, want)
+		}
+	}
+}
+
+func TestWriteTickAddsEnergyToBuckets(t *testing.T) {
 	db, _ := openTemp(t)
 	ctx := context.Background()
-	for _, r := range []AppEnergy{{1000, "Code", 20}, {1060, "Google Chrome", 30}, {1060, "Code", 5}} {
-		if err := db.Exec(ctx, `INSERT INTO app_energy(ts,app,energy) VALUES(?,?,?)`, r.TS, r.App, r.Energy); err != nil {
+	ticks := []Tick{
+		{TS: 1000, Pct: 70, Energy: []EnergyDelta{{App: "Code", CPU: 20e9}, {App: "WindowServer", System: true, CPU: 1e9, GPU: 2e9}}},
+		{TS: 1060, Pct: 70, Energy: []EnergyDelta{{App: "Code", CPU: 5e9, GPU: 1e9, ANE: 1e9}}},
+		{TS: 1800, Pct: 69, Energy: []EnergyDelta{{App: "Google Chrome", CPU: 30e9}}},
+	}
+	for _, tk := range ticks {
+		if err := db.WriteTick(ctx, tk); err != nil {
 			t.Fatal(err)
 		}
 	}
-	got, err := db.EnergySince(ctx, 1060)
+	var n int
+	if err := db.sql.QueryRowContext(ctx, `SELECT COUNT(*) FROM app_energy`).Scan(&n); err != nil || n != 3 {
+		t.Errorf("app_energy rows = %d, %v; want 3 (Code's two ticks share bucket 900)", n, err)
+	}
+	var cpu, gpu, ane int64
+	if err := db.sql.QueryRowContext(ctx, `SELECT cpu_nj, gpu_nj, ane_nj FROM app_energy
+		JOIN apps ON apps.id = app_id WHERE name = 'Code' AND ts = 900`).Scan(&cpu, &gpu, &ane); err != nil ||
+		cpu != 25e9 || gpu != 1e9 || ane != 1e9 {
+		t.Errorf("Code bucket = %d/%d/%d, %v; want 25e9/1e9/1e9", cpu, gpu, ane, err)
+	}
+
+	got, err := db.EnergySince(ctx, 0)
+	want := []AppEnergy{{900, "Code", false, 27}, {900, "WindowServer", true, 3}, {1800, "Google Chrome", false, 30}}
+	if err != nil || fmt.Sprint(got) != fmt.Sprint(want) {
+		t.Errorf("EnergySince(0) = %+v, %v; want %+v", got, err, want)
+	}
+	if got, _ := db.EnergySince(ctx, 1800); len(got) != 1 || got[0].App != "Google Chrome" {
+		t.Errorf("EnergySince(1800) = %+v, want only the 1800 bucket", got)
+	}
+	if sums, err := db.EnergySums(ctx, 0, 1800); err != nil || fmt.Sprint(sums) != "map[Code:27 WindowServer:3]" {
+		t.Errorf("EnergySums = %v, %v", sums, err)
+	}
+}
+
+func TestEnergySinceOnASchemaTwoDatabase(t *testing.T) {
+	db, path := openTemp(t)
+	ctx := context.Background()
+	if err := db.Exec(ctx, "DROP TABLE app_energy; DROP TABLE apps"); err != nil {
+		t.Fatal(err)
+	}
+	ro, err := Open(path, true) // status reads without migrating
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(got) != 2 || got[0].App != "Code" || got[1].App != "Google Chrome" {
-		t.Fatalf("EnergySince = %+v", got)
+	defer ro.Close()
+	if got, err := ro.EnergySince(ctx, 0); err != nil || got != nil {
+		t.Errorf("EnergySince = %v, %v; want none before the apps table", got, err)
+	}
+}
+
+func TestMigrationReplacesTopEnergyTable(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "old.db")
+	db, err := Open(path, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	ctx := context.Background()
+	// A schema-2 database, as every install before ADR-0006 has.
+	for _, q := range []string{
+		`CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)`,
+		`INSERT INTO meta VALUES('schema_version', '2')`,
+		`CREATE TABLE samples (ts INTEGER PRIMARY KEY, pct INTEGER NOT NULL, on_ac INTEGER NOT NULL, charging INTEGER NOT NULL, watts REAL, raw_cur_mah INTEGER, raw_max_mah INTEGER)`,
+		`INSERT INTO samples(ts, pct, on_ac, charging) VALUES(1000, 70, 0, 0)`,
+		`CREATE TABLE app_energy (ts INTEGER NOT NULL, app TEXT NOT NULL, energy REAL NOT NULL, cpu_pct REAL, is_system INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (ts, app))`,
+		`CREATE INDEX app_energy_app_ts ON app_energy (app, ts)`,
+		`CREATE TABLE daily_rollup (day TEXT PRIMARY KEY, min_battery INTEGER NOT NULL DEFAULT 0, min_ac INTEGER NOT NULL DEFAULT 0, min_asleep INTEGER NOT NULL DEFAULT 0, pct_consumed REAL, app_energy TEXT)`,
+		`CREATE TABLE health (day TEXT PRIMARY KEY, cycles INTEGER, raw_max_mah INTEGER, nominal_mah INTEGER, design_mah INTEGER, temp_c REAL, condition TEXT)`,
+		`CREATE TABLE runs (started INTEGER PRIMARY KEY)`,
+	} {
+		if err := db.Exec(ctx, q); err != nil {
+			t.Fatal(q, err)
+		}
+	}
+	if err := db.Migrate(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.WriteTick(ctx, Tick{TS: 1060, Pct: 70, Energy: []EnergyDelta{{App: "Code", CPU: 1e9}}}); err != nil {
+		t.Fatalf("WriteTick after migrating: %v", err)
+	}
+	if n, _, _ := db.SampleStats(ctx); n != 2 {
+		t.Errorf("samples = %d, want the old row kept", n)
 	}
 }
 
@@ -342,8 +421,8 @@ func TestRunStartsAndSampleLookups(t *testing.T) {
 	ctx := context.Background()
 	var v string
 	db.sql.QueryRowContext(ctx, "SELECT value FROM meta WHERE key='schema_version'").Scan(&v)
-	if v != "2" {
-		t.Fatalf("schema_version = %q, want 2 (runs table)", v)
+	if v != "3" {
+		t.Fatalf("schema_version = %q, want 3", v)
 	}
 	for _, ts := range []int64{100, 500, 900} {
 		if err := db.RecordRunStart(ctx, ts); err != nil {
@@ -423,8 +502,17 @@ func TestRollupStorage(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	for _, e := range [][]any{{100, "Brave", 2.5}, {160, "Brave", 1.5}, {160, "Slack", 1.0}, {280, "Brave", 9.0}} {
-		if err := db.Exec(ctx, `INSERT INTO app_energy(ts, app, energy) VALUES(?,?,?)`, e...); err != nil {
+	for _, e := range []struct {
+		ts  int64
+		app string
+		j   float64
+	}{{100, "Brave", 2.5}, {160, "Brave", 1.5}, {160, "Slack", 1.0}, {280, "Brave", 9.0}} {
+		// Real buckets start on multiples of 900; any ts works for the store.
+		if err := db.Exec(ctx, `INSERT INTO apps(name) VALUES(?) ON CONFLICT DO NOTHING`, e.app); err != nil {
+			t.Fatal(err)
+		}
+		if err := db.Exec(ctx, `INSERT INTO app_energy(ts, app_id, cpu_nj) SELECT ?, id, ? FROM apps WHERE name = ?`,
+			e.ts, int64(e.j*1e9), e.app); err != nil {
 			t.Fatal(err)
 		}
 	}
