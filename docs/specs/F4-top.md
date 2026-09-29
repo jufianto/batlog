@@ -92,9 +92,12 @@ Human, `--live`: `⚡ top energy · live (1 s)`, with SHARE only; no battery
 column.
 
 JSON:
-- `{range, awake_min, battery_min, pct_used, rows: [{app, share, est_battery_pct, is_system, energy_j}]}`
+- `{range, awake_min, battery_min, pct_used, energy_since, cost_pct_used, rows: [{app, share, est_battery_pct, is_system, energy_j}]}`
+- `energy_since` is when app energy recording began if that is inside the
+  range, else `null`. `cost_pct_used` is the percent used from then on, and
+  it is what `est_battery_pct` sums to.
 - `--session` adds `session: {id, start, end, ongoing, heaviest: {start, end, avg_watts}}`.
-- `--live` has `rows` with `share`, `is_system` and `energy_j` only.
+- `--live` has `{range, live: true, rows}`, and its rows have only `app`, `share`, `is_system` and `energy_j`.
 - `share` is 0–1. `est_battery_pct` is `null` without battery time. Rows are
   ordered by share desc, then name asc.
 
@@ -106,7 +109,9 @@ JSON:
 | `--today` but no daemon data at all | Fall back to `--live` with a notice |
 | `--session` ID not found | Exit 1: `no battery session <id> in the last 90 days — see batlog history` |
 | `--session` of a `(pmset)` session, or before energy recording began | The session header + `no app energy for this session (recording started <date>)` |
+| `--session`, `--week` or `--since` with no app energy recorded at all | Exit 1: `no app energy recorded yet: batlog daemon install starts recording` (only the default and `--today` fall back to live) |
 | App ran only while on AC | In the share, with battery cost `0%` |
+| Range starts before app energy recording began | Battery cost spreads only the percent used since, plus `app energy from <time> only, when recording started; battery cost covers the N% used since` |
 | < 30 min awake in range | Show the table + `short window — shares may be noisy` |
 | Counters look implausible on some macOS | The daemon logs it and skips energy for that tick (F5); `top` shows what was recorded |
 
@@ -116,7 +121,8 @@ JSON:
       Power* order in 4 of 5 spot checks (PRD metric 2).
 - [ ] All of Chrome's helpers and children appear as one `Google Chrome` row
       (fixture of coalition members).
-- [ ] Shares sum to 100 ± 1 %; battery costs sum to the percent consumed ± 1.
+- [ ] Shares sum to 100 ± 1 %; battery costs sum to the percent consumed
+      while app energy was recorded, ± 1.
 - [ ] `--session <id>` from `batlog history` round-trips, including a session
       that crosses midnight and a second session in the same minute.
 - [ ] `-n 25 --json` returns ≤ 25 rows, ordered share desc then name asc.

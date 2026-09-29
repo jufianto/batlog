@@ -103,6 +103,12 @@ func TestWriteTickAddsEnergyToBuckets(t *testing.T) {
 	if err != nil || fmt.Sprint(got) != fmt.Sprint(want) {
 		t.Errorf("EnergySince(0) = %+v, %v; want %+v", got, err, want)
 	}
+	if got, _ := db.EnergyBetween(ctx, 900, 1800); len(got) != 2 || got[1].App != "WindowServer" {
+		t.Errorf("EnergyBetween(900, 1800) = %+v, want bucket 900 only", got)
+	}
+	if ts, err := db.FirstEnergyTS(ctx); ts != 900 || err != nil {
+		t.Errorf("FirstEnergyTS = %d, %v", ts, err)
+	}
 	if got, _ := db.EnergySince(ctx, 1800); len(got) != 1 || got[0].App != "Google Chrome" {
 		t.Errorf("EnergySince(1800) = %+v, want only the 1800 bucket", got)
 	}
@@ -124,6 +130,9 @@ func TestEnergySinceOnASchemaTwoDatabase(t *testing.T) {
 	defer ro.Close()
 	if got, err := ro.EnergySince(ctx, 0); err != nil || got != nil {
 		t.Errorf("EnergySince = %v, %v; want none before the apps table", got, err)
+	}
+	if ts, err := ro.FirstEnergyTS(ctx); err != nil || ts != 0 {
+		t.Errorf("FirstEnergyTS = %d, %v", ts, err)
 	}
 }
 

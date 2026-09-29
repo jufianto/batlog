@@ -1,10 +1,12 @@
 package history
 
 import (
+	"fmt"
 	"math"
 	"testing"
 	"time"
 
+	"github.com/jufianto/batlog/internal/localday"
 	"github.com/jufianto/batlog/internal/pmset"
 	"github.com/jufianto/batlog/internal/store"
 )
@@ -270,5 +272,58 @@ func TestJustWokenTailIsSleep(t *testing.T) {
 	r = Build(in)
 	if r.Totals.GapSec != 20*60 || !r.Sessions[1].DataGap {
 		t.Errorf("totals = %+v, data gap = %v", r.Totals, r.Sessions[1].DataGap)
+	}
+}
+
+func TestSessionIDsAreLocalStartMinutes(t *testing.T) {
+	r := Build(today())
+	if len(r.Sessions) != 2 || r.Sessions[0].ID != "0925-2310" || r.Sessions[1].ID != "0926-0200" {
+		t.Errorf("IDs = %q, %q; want the start in local time, yesterday's date kept", r.Sessions[0].ID, r.Sessions[1].ID)
+	}
+
+	// Unplug, plug, unplug inside one minute: the second gets a suffix.
+	base := at(600)
+	in := Input{From: midnight, To: time.Unix(at(700), 0), FirstSampleTS: at(-60), Samples: []store.Sample{
+		{TS: base - 60, Pct: 80, OnAC: true}, {TS: base, Pct: 80}, {TS: base + 20, Pct: 80, OnAC: true},
+		{TS: base + 40, Pct: 80}, {TS: base + 100, Pct: 79}, {TS: base + 160, Pct: 79, OnAC: true},
+		{TS: base + 220, Pct: 79}, {TS: base + 280, Pct: 79},
+	}}
+	var ids []string
+	for _, s := range Build(in).Sessions {
+		ids = append(ids, s.ID)
+	}
+	if fmt.Sprint(ids) != "[0926-1000 0926-1000b 0926-1003]" {
+		t.Errorf("IDs = %v", ids)
+	}
+}
+
+func TestIDDay(t *testing.T) {
+	now := time.Date(2026, 1, 1, 0, 30, 0, 0, time.Local)
+	cases := []struct {
+		id, want string // want: the local date whose history holds the session, or "error"
+	}{
+		{"1231-2350", "2025-12-31"}, // last year: this year's would be in the future
+		{"0101-0010", "2026-01-01"},
+		{"0101-0040", "2025-01-01"}, // ten minutes from now, so a year ago
+		{"0229-1200", "2024-02-29"}, // the most recent leap day
+		{"0926-1656b", "2025-09-26"},
+		{"0931-1200", "error"},
+		{"0926-2460", "error"},
+		{"926-1656", "error"},
+		{"0926-1656B", "error"},
+		{"last", "error"},
+	}
+	for _, c := range cases {
+		d, err := IDDay(c.id, now)
+		got := "error"
+		if err == nil {
+			got = d.Format("2006-01-02")
+			if !d.Equal(localday.Start(d)) {
+				t.Errorf("IDDay(%q) = %v, want a local day start", c.id, d)
+			}
+		}
+		if got != c.want {
+			t.Errorf("IDDay(%q) = %s (%v), want %s", c.id, got, err, c.want)
+		}
 	}
 }
