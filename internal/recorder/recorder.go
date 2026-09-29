@@ -53,6 +53,8 @@ func (r *Recorder) Tick(ctx context.Context) error {
 	day := now.Format("2006-01-02")
 	withHealth := day != r.lastHealthDay
 	t := TickFrom(s, now, withHealth)
+	// If the write below fails, this minute's app energy is lost: the
+	// tracker's baseline has already moved. The sample is lost with it.
 	t.Energy = r.energy(now)
 	if err := r.DB.WriteTick(ctx, t); err != nil {
 		return err
@@ -88,6 +90,7 @@ func (r *Recorder) energy(now time.Time) []store.EnergyDelta {
 		return nil
 	}
 	r.energyFailing = false
+	ds = energy.Fold(ds)
 	out := make([]store.EnergyDelta, len(ds))
 	for i, d := range ds {
 		out[i] = store.EnergyDelta{App: d.App, System: d.System, CPU: d.CPU, GPU: d.GPU, ANE: d.ANE}

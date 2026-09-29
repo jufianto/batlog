@@ -28,8 +28,18 @@ CREATE TABLE app_energy (
 ) WITHOUT ROWID;
 ```
 
-Size: about 40 active apps × 96 buckets comes to roughly 4 k rows a day at
-~30 bytes each, or 3–4 MB for the 90 days kept raw. Every UTC offset in use
+**Size.** On a developer's Mac, measured 2026-09-29:
+- about 400 coalitions exist, and about 200 apps use *some* energy every
+  minute;
+- only about 20 use 0.1 J or more in a minute, and the rest together are
+  about 1 % of all energy.
+
+The recorder therefore folds each tick's deltas under 0.1 J into one
+`(other)` row, tagged system (`energy.Fold`). A bucket then holds tens of
+apps rather than about 290. That is a few thousand rows a day, or 10–20 MB
+over the 90 days kept raw, instead of about 70 MB.
+
+Every UTC offset in use
 is a multiple of 15 minutes, so a bucket that starts on a multiple of 900 s
 also starts on a local quarter hour.
 
@@ -55,21 +65,43 @@ Each read:
 It reads executable paths only for coalitions not yet named, so a steady
 minute costs about one syscall per process plus one per coalition. Field
 indexes are those of the spike (`energy` 11, `ane_energy_nj` 39,
-`gpu_energy_nj` 41). A reply shorter than 42 fields is an error.
+`gpu_energy_nj` 41; 40 is `phys_footprint`, in bytes). `energy.FromUsage`
+parses a reply and is tested against a real one in `testdata/`.
 
-**Naming** (pure, from the spike's `leaderName`):
-- The name is the bundle of the member that is an app's main executable
-  (`X.app/Contents/MacOS/Y`, outermost bundle), lowest pid first.
-- Else it is the most common outermost bundle among the members.
-- Else it is the lowest pid's command name.
+The kernel copies `min(struct, buffer)` and writes the size back unchanged,
+so a macOS that moved these fields cannot be detected from the reply. It is
+caught only by the Tracker's sanity check, and by the live test on the
+macOS CI runner.
 
-**`is_system`** is true when:
-- no member lives in a `.app` bundle,
-- and every readable path is under `/System/`, `/usr/`, `/bin/`, `/sbin/`
-  or `/Library/Apple/`, or no path is readable (root-owned).
+**Naming** (pure; it started as the spike's `leaderName`, then was fixed in
+review). Each member counts toward its outermost `.app` bundle. A bundle
+inside a `.framework/` does not count: Homebrew's
+`Python.framework/…/Python.app` once named T3 Code's coalition "Python".
 
-`WindowServer` and `kernel_task` are therefore system. `Finder` and
-batlog's own daemon are not.
+The best bundle is chosen in this order:
+1. one installed in an Applications folder (`/Applications`,
+   `~/Applications`, `/System/Applications`, Safari's cryptex), so a
+   Playwright Chromium in a cache never names the agent that runs it;
+2. then one whose own main executable (`X.app/Contents/MacOS/Y`) is a
+   member;
+3. then the one with the most members, then the one with the lowest pid.
+
+Without any bundle, the name is the lowest pid's executable name, or its
+command when the path is unreadable.
+
+**`is_system`** is true for:
+- bundles under `/System/Library/` or `/Library/Apple/` (Dock,
+  NotificationCenter, ControlCenter), except `Finder`;
+- coalitions without a bundle whose readable paths are all under
+  `/System/`, `/usr/` (but not `/usr/local/`), `/bin/`, `/sbin/` or
+  `/Library/Apple/`, or that have no readable path (root-owned).
+
+`WindowServer` and `kernel_task` are therefore system. `Finder`,
+System Settings, Safari and batlog's own daemon are not.
+
+In `apps`, an app once seen as non-system stays non-system. Two coalitions
+can share a name, like Homebrew's `python3` and `/usr/bin/python3`, and the
+one flag per name applies to every past bucket.
 
 **Tracker** (pure; it holds the previous reading per coalition):
 
@@ -83,9 +115,10 @@ func (t *Tracker) Update(now time.Time, rs []Reading) ([]Delta, error) // Delta{
 | Coalition first seen later | Counted from zero: it was created since the previous read |
 | A counter decreased | That coalition is re-baselined and skipped, with one log line per process lifetime |
 | All deltas together exceed 200 W over the elapsed time | The whole read is dropped with a logged warning; the baseline moves to it |
-| Coalition gone | Forgotten; its energy after the previous read is lost (at most one minute) |
+| Coalition missing from a read | Kept for a day of reads (1440), so one that regains a member later is not counted from zero; its energy between the last read and its end is lost (at most one minute) |
 
 Deltas for the same name are summed, which covers two coalitions of one app.
+The sum is taken in float64, so garbage fields cannot wrap below the limit.
 
 ## Recorder and store
 

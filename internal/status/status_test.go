@@ -226,3 +226,13 @@ func TestFlatBatteryIsExactlyZeroWhateverTheTimestamps(t *testing.T) {
 		}
 	}
 }
+
+func TestWorstIsNeverASystemAppOrNobody(t *testing.T) {
+	idle := []store.AppEnergy{{TS: now.Unix(), App: "WindowServer", System: true, Energy: 5}, {TS: now.Unix(), App: "(other)", System: true, Energy: 1}}
+	if r := Build(onBattery, nil, idle, now); r.Worst != nil {
+		t.Errorf("Worst = %+v, want nil when only system apps used energy", r.Worst)
+	}
+	if r := Build(onBattery, nil, idle, now); r.HasData {
+		t.Error("energy buckets alone reach 30 min back; HasData must come from samples")
+	}
+}

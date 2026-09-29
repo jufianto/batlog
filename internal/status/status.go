@@ -48,7 +48,7 @@ type Report struct {
 	Watts        *float64
 	MacOSMinutes *int // macOS's estimate; only while discharging
 
-	HasData    bool // any daemon rows in the window
+	HasData    bool // any daemon samples in the window (energy buckets reach further back)
 	Collecting bool // on battery with data but fewer than minSamples usable rows
 	Drain      *float64
 	EstMinutes *int // nil when the rate is 0
@@ -64,7 +64,7 @@ func Build(s battery.Snapshot, samples []store.Sample, energy []store.AppEnergy,
 		OnAC:         s.OnAC,
 		Charging:     s.Charging,
 		FullyCharged: s.FullyCharged,
-		HasData:      len(samples) > 0 || len(energy) > 0,
+		HasData:      len(samples) > 0,
 	}
 	if s.HasWatts {
 		w := math.Round(s.Watts*10) / 10
@@ -150,9 +150,6 @@ func slopePerHour(samples []store.Sample) float64 {
 // share of all apps' energy, system ones included: WindowServer's drain is
 // real, but quitting it is not advice (F4).
 func worst(energy []store.AppEnergy) *Offender {
-	if len(energy) == 0 {
-		return nil
-	}
 	sums := map[string]float64{}
 	var total float64
 	for _, e := range energy {
@@ -161,14 +158,17 @@ func worst(energy []store.AppEnergy) *Offender {
 		}
 		total += e.Energy
 	}
-	if total <= 0 {
+	if len(sums) == 0 || total <= 0 {
 		return nil
 	}
-	best := Offender{}
+	var best string
 	for app, sum := range sums {
-		if sum > best.Share*total || (sum == best.Share*total && app < best.App) {
-			best = Offender{App: app, Share: sum / total}
+		if best == "" || sum > sums[best] || (sum == sums[best] && app < best) {
+			best = app
 		}
 	}
-	return &best
+	if sums[best] <= 0 {
+		return nil
+	}
+	return &Offender{App: best, Share: sums[best] / total}
 }

@@ -318,15 +318,16 @@ func (d *DB) AddEnergy(ctx context.Context, ts int64, ds []EnergyDelta) error {
 	return tx.Commit()
 }
 
-// addEnergy upserts each app by name and adds its delta to the bucket. The
-// newest is_system wins: classification can only get better as more of an
-// app's processes are seen.
+// addEnergy upserts each app by name and adds its delta to the bucket. An
+// app seen once as non-system stays so: two coalitions can share a name
+// (Homebrew's python3 and /usr/bin/python3), and one flag per name must not
+// flip back and forth, as it applies to every past bucket.
 func addEnergy(ctx context.Context, tx *sql.Tx, bucket int64, ds []EnergyDelta) error {
 	for _, e := range ds {
 		var id int64
 		if err := tx.QueryRowContext(ctx,
 			`INSERT INTO apps(name, is_system) VALUES(?, ?)
-			 ON CONFLICT(name) DO UPDATE SET is_system = excluded.is_system
+			 ON CONFLICT(name) DO UPDATE SET is_system = apps.is_system AND excluded.is_system
 			 RETURNING id`, e.App, e.System).Scan(&id); err != nil {
 			return fmt.Errorf("write app %q: %w", e.App, err)
 		}

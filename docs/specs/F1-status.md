@@ -26,7 +26,9 @@ No other flags. Must answer in under 1 s.
      number. JSON `est_minutes_left` keeps the minutes whenever the rate is
      above 0, and is `null` only at a rate of 0.
    - **Worst offender** = the non-system app with the most energy in the
-     `app_energy` buckets of the last 15 minutes (F4 has the data source).
+     current and previous 15-minute `app_energy` buckets (so 15–30 min of
+     data; F4 has the data source). No offender when only system apps used
+     energy.
 3. Render. Anything that cannot be computed is omitted (human) or `null`
    (JSON). Never guessed.
 

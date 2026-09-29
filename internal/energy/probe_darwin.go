@@ -11,20 +11,13 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-// xnu bsd/sys/proc_info.h and osfmk/mach/coalition.h. Not public API, so a
-// layout change shows up as ErrImplausible (tracker) or a short reply here.
+// xnu bsd/sys/proc_info.h and osfmk/mach/coalition.h.
 const (
 	procInfoCallPidinfo        = 2
 	procPidPathInfo            = 11
 	procPidCoalitionInfo       = 20
 	procPidPathInfoMaxSize     = 4 * 1024
 	coalitionInfoResourceUsage = 1
-
-	// uint64 indexes in struct coalition_resource_usage.
-	cruEnergy    = 11 // CPU energy, nJ
-	cruANEEnergy = 39 // Neural Engine, nJ
-	cruGPUEnergy = 41 // nJ
-	cruMinFields = cruGPUEnergy + 1
 )
 
 // Read lists every process's resource coalition and reads each coalition's
@@ -56,10 +49,12 @@ func Read(named func(coalition uint64) bool) ([]Reading, error) {
 		if err != nil {
 			continue // the coalition emptied since the list
 		}
-		if len(cu) < cruMinFields {
-			return nil, fmt.Errorf("coalition_info returned %d fields, want at least %d", len(cu), cruMinFields)
+		r, err := FromUsage(c, cu)
+		if err != nil {
+			return nil, err
 		}
-		out = append(out, Reading{Coalition: c, CPU: cu[cruEnergy], GPU: cu[cruGPUEnergy], ANE: cu[cruANEEnergy], Members: ms})
+		r.Members = ms
+		out = append(out, r)
 	}
 	return out, nil
 }
@@ -103,6 +98,8 @@ func coalitionUsage(cid uint64) ([]uint64, error) {
 	if e != 0 {
 		return nil, e
 	}
+	// The kernel copies min(its struct, our buffer) and leaves size as we
+	// passed it, so the length says nothing about the layout.
 	out := make([]uint64, min(size, uintptr(len(buf)))/8)
 	for i := range out {
 		out[i] = binary.LittleEndian.Uint64(buf[i*8:])

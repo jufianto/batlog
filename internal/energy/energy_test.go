@@ -3,6 +3,7 @@ package energy
 import (
 	"errors"
 	"fmt"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -40,6 +41,25 @@ func TestNameAndSystem(t *testing.T) {
 		{"a user binary is not system", []Member{member(4242, "/Users/me/.local/bin/batlog")}, "batlog", false},
 		{"unreadable paths fall back to the command", []Member{{PID: 0, Comm: "kernel_task"}}, "kernel_task", true},
 		{"homebrew daemons are not system", []Member{member(77, "/opt/homebrew/opt/postgresql@17/bin/postgres")}, "postgres", false},
+		{"/usr/local is not system", []Member{member(78, "/usr/local/bin/ollama")}, "ollama", false},
+		// Seen live: T3 Code's coalition was named Python.
+		{"a Python.app inside a framework is not an app", []Member{
+			member(100, "/opt/homebrew/Cellar/python@3.13/3.13.7/Frameworks/Python.framework/Versions/3.13/Resources/Python.app/Contents/MacOS/Python"),
+			member(200, "/Applications/T3 Code.app/Contents/MacOS/T3 Code"),
+		}, "T3 Code", false},
+		{"an installed app beats a bundle run from a cache", []Member{
+			member(100, "/Users/me/Library/Caches/ms-playwright/chromium-1187/chrome-mac/Chromium.app/Contents/MacOS/Chromium"),
+			member(101, "/Users/me/Library/Caches/ms-playwright/chromium-1187/chrome-mac/Chromium.app/Contents/Frameworks/Chromium Framework.framework/Helpers/Chromium Helper.app/Contents/MacOS/Chromium Helper"),
+			member(300, "/Applications/Warp.app/Contents/MacOS/stable"),
+		}, "Warp", false},
+		{"~/Applications counts as installed", []Member{
+			member(1, "/Users/me/src/app/node_modules/electron/dist/Electron.app/Contents/MacOS/Electron"),
+			member(2, "/Users/me/Applications/Chrome Apps.localized/Figma.app/Contents/MacOS/app_mode_loader"),
+		}, "Figma", false},
+		{"system UI agents are system", []Member{member(500, "/System/Library/CoreServices/Dock.app/Contents/MacOS/Dock")}, "Dock", true},
+		{"Safari runs from its cryptex", []Member{member(900, "/System/Volumes/Preboot/Cryptexes/App/System/Applications/Safari.app/Contents/MacOS/Safari"),
+			member(901, "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.WebContent.xpc/Contents/MacOS/com.apple.WebKit.WebContent")}, "Safari", false},
+		{"System Settings is an app", []Member{member(5, "/System/Applications/System Settings.app/Contents/MacOS/System Settings")}, "System Settings", false},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -112,10 +132,16 @@ func TestTrackerRejectsImplausibleReads(t *testing.T) {
 	if err != nil || len(ds) != 1 || ds[0].CPU != 60e9 {
 		t.Errorf("after rejection = %v, %v", ds, err)
 	}
-	// A long sleep spreads the limit over the whole gap.
-	ds, err = tr.Update(t0.Add(10*time.Hour), []Reading{reading(10, 250*60e9+60e9+900e9, 0, 0)})
-	if err != nil || len(ds) != 1 {
-		t.Errorf("after sleep = %v, %v", ds, err)
+	// The limit is over the time since the previous read: 250 W × 60 s
+	// again, but spread over 10 minutes, is 25 W.
+	ds, err = tr.Update(t0.Add(12*time.Minute), []Reading{reading(10, 2*250*60e9+60e9, 0, 0)})
+	if err != nil || len(ds) != 1 || ds[0].CPU != 250*60e9 {
+		t.Errorf("over a longer gap = %v, %v", ds, err)
+	}
+	// Fields full of garbage must not wrap around the limit.
+	ds, err = tr.Update(t0.Add(13*time.Minute), []Reading{reading(10, 2*250*60e9+60e9+1<<63, 1<<63, 1<<63)})
+	if !errors.Is(err, ErrImplausible) {
+		t.Errorf("wrapping read = %v, %v; want ErrImplausible", ds, err)
 	}
 }
 
@@ -144,5 +170,49 @@ func TestTrackerUnnamedCoalitionWithoutMembers(t *testing.T) {
 	ds, _ := tr.Update(t0.Add(time.Minute), []Reading{reading(7, 1e9, 0, 0)})
 	if len(ds) != 1 || ds[0].App != "(unknown)" {
 		t.Errorf("Update = %v, want an (unknown) row rather than a lost one", ds)
+	}
+}
+
+func TestFold(t *testing.T) {
+	ds := []Delta{
+		{App: "Brave Browser", CPU: 5e9},
+		{App: "Dock", System: true, CPU: 0.02e9},
+		{App: "Slack", CPU: 0.05e9, GPU: 0.04e9},
+		{App: "Warp", GPU: 0.1e9},
+	}
+	want := []Delta{{"(other)", true, 0.07e9, 0.04e9, 0}, {"Brave Browser", false, 5e9, 0, 0}, {"Warp", false, 0, 0.1e9, 0}}
+	if got := Fold(ds); fmt.Sprint(got) != fmt.Sprint(want) {
+		t.Errorf("Fold = %v, want %v", got, want)
+	}
+	if got := Fold(ds[:1]); len(got) != 1 {
+		t.Errorf("nothing small, no (other) row: %v", got)
+	}
+}
+
+// TestFromUsageFixture pins the field indexes to a real reply: CPU energy
+// is the largest counter the kernel keeps in nJ, and GPU (41) must not be
+// read from phys_footprint (40), which is bytes.
+func TestFromUsageFixture(t *testing.T) {
+	data, err := os.ReadFile("testdata/coalition-usage-15.7.3.txt")
+	if err != nil {
+		t.Fatal(err)
+	}
+	cu := make([]uint64, 128)
+	for _, line := range strings.Split(string(data), "\n") {
+		var i int
+		var v uint64
+		if n, _ := fmt.Sscan(line, &i, &v); n == 2 {
+			cu[i] = v
+		}
+	}
+	r, err := FromUsage(2403, cu)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if r.CPU != 50943023986712 || r.GPU != 1777752491438 || r.ANE != 153181786 || r.Coalition != 2403 {
+		t.Errorf("FromUsage = %+v", r)
+	}
+	if _, err := FromUsage(1, cu[:41]); err == nil {
+		t.Error("a reply without the GPU field must be an error")
 	}
 }

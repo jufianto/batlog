@@ -23,10 +23,39 @@ var ErrImplausible = errors.New("implausible energy reading")
 const maxWatts = 200
 
 // forgetAfter is how many reads a coalition may be missing before its
-// baseline is dropped. Coalition ids are never reused, so keeping it longer
-// only costs memory; forgetting too soon would count its whole life again
-// if a read merely failed.
-const forgetAfter = 60
+// baseline is dropped: a day of ticks. A coalition can outlive its members
+// (lingering children) and regain one later; forgetting it then would count
+// its whole life in one tick. Coalition ids are never reused, and a
+// baseline is ~80 bytes, so keeping them long costs nothing.
+const forgetAfter = 24 * 60
+
+// Other is the row small deltas are folded into (Fold).
+const Other = "(other)"
+
+// minDeltaNJ: one tick's delta below this (0.1 J, ~2 mW over a minute) is
+// folded into Other. On a developer's Mac ~200 apps move every minute but
+// ~20 pass this, and the rest are ~1 % of the energy (measured 2026-09-29),
+// so folding keeps app_energy ~5× smaller without changing any ranking.
+const minDeltaNJ = 100_000_000
+
+// uint64 indexes in xnu's struct coalition_resource_usage (not public API;
+// testdata holds a real reply). The kernel does not report the struct's
+// size, so a macOS that moved these fields is caught only by the Tracker's
+// sanity check (ADR-0006).
+const (
+	cruEnergy    = 11 // CPU energy, nJ
+	cruANEEnergy = 39 // Neural Engine, nJ
+	cruGPUEnergy = 41 // nJ; 40 is phys_footprint, in bytes
+	cruFields    = cruGPUEnergy + 1
+)
+
+// FromUsage reads one coalition's counters out of a coalition_info reply.
+func FromUsage(coalition uint64, cu []uint64) (Reading, error) {
+	if len(cu) < cruFields {
+		return Reading{}, fmt.Errorf("coalition_info: %d fields, want at least %d", len(cu), cruFields)
+	}
+	return Reading{Coalition: coalition, CPU: cu[cruEnergy], GPU: cu[cruGPUEnergy], ANE: cu[cruANEEnergy]}, nil
+}
 
 // Reading is one coalition's cumulative counters.
 type Reading struct {
@@ -49,36 +78,64 @@ type Delta struct {
 	CPU, GPU, ANE uint64 // nanojoules
 }
 
-// Name names a coalition the way Activity Monitor does, roughly:
-//  1. the member that is an app's own main executable
-//     (X.app/Contents/MacOS/Y, X the outermost bundle), lowest pid first;
-//  2. else the most common outermost bundle among members;
-//  3. else the lowest pid's executable name, or its command.
+// Name names a coalition the way Activity Monitor does, roughly, by the
+// app bundle its members run from. Among the bundles seen, the best is:
+//  1. installed in an Applications folder (/Applications, ~/Applications,
+//     /System/Applications, Safari's cryptex), so a Chromium that an
+//     agent's Playwright runs from node_modules never names the agent;
+//  2. then one whose own main executable (X.app/Contents/MacOS/Y) is a
+//     member, over a bundle only helpers run from;
+//  3. then the one most members run from, then the lowest pid.
 //
-// system is true when no member is in an app bundle and every readable
-// path is a system path (or none is readable: root-owned).
+// Only a member's outermost bundle counts, and not when it sits inside a
+// framework: Homebrew's Python.framework/…/Python.app is how python runs,
+// not an app. Without a bundle, the name is the lowest pid's executable, or
+// its command when the path is unreadable.
+//
+// system is true for bundles under /System/Library or /Library/Apple
+// (Dock, NotificationCenter; Finder excepted), and for bundle-less
+// coalitions whose readable paths are all system paths, or that have none
+// readable (root-owned).
 func Name(members []Member) (name string, system bool) {
 	ms := slices.Clone(members)
 	sort.Slice(ms, func(i, j int) bool { return ms[i].PID < ms[j].PID })
+
+	type cand struct {
+		installed, main bool
+		count           int
+		sysLib          bool
+		order           int // first seen, i.e. lowest pid
+	}
+	cands := map[string]*cand{}
 	for _, m := range ms {
-		i := strings.Index(m.Path, ".app/Contents/MacOS/")
-		if i >= 0 && strings.Index(m.Path, ".app/") == i && !strings.Contains(m.Path[i+len(".app/Contents/MacOS/"):], "/") {
-			return bundle(m.Path), false
+		b, ok := appBundle(m.Path)
+		if !ok {
+			continue
+		}
+		c := cands[b.name]
+		if c == nil {
+			c = &cand{order: len(cands)}
+			cands[b.name] = c
+		}
+		c.installed = c.installed || b.installed
+		c.main = c.main || b.main
+		c.sysLib = c.sysLib || b.sysLib
+		c.count++
+	}
+	var best *cand
+	for n, c := range cands {
+		switch {
+		case best == nil,
+			c.installed != best.installed && c.installed,
+			c.installed == best.installed && c.main != best.main && c.main,
+			c.installed == best.installed && c.main == best.main && (c.count > best.count || c.count == best.count && c.order < best.order):
+			best, name = c, n
 		}
 	}
-	count := map[string]int{}
-	best := ""
-	for _, m := range ms {
-		if b := bundle(m.Path); b != "" {
-			count[b]++
-			if count[b] > count[best] {
-				best = b
-			}
-		}
+	if best != nil {
+		return name, best.sysLib && name != "Finder"
 	}
-	if best != "" {
-		return best, false
-	}
+
 	system = true
 	for _, m := range ms {
 		if m.Path != "" && !systemPath(m.Path) {
@@ -96,16 +153,35 @@ func Name(members []Member) (name string, system bool) {
 	return "", system
 }
 
-// bundle is the outermost .app bundle's name in an executable path.
-func bundle(path string) string {
+type bundleInfo struct {
+	name            string
+	installed, main bool
+	sysLib          bool // under /System/Library or /Library/Apple
+}
+
+// appBundle finds the outermost .app bundle in an executable path. ok is
+// false without one, or when it is inside a framework.
+func appBundle(path string) (b bundleInfo, ok bool) {
 	i := strings.Index(path, ".app/")
 	if i < 0 {
-		return ""
+		return b, false
 	}
-	return path[strings.LastIndex(path[:i], "/")+1 : i]
+	dir := path[:strings.LastIndex(path[:i], "/")+1]
+	if strings.Contains(dir, ".framework/") {
+		return b, false
+	}
+	rest := path[i+len(".app/"):]
+	b.name = path[len(dir):i]
+	b.main = strings.HasPrefix(rest, "Contents/MacOS/") && !strings.Contains(rest[len("Contents/MacOS/"):], "/")
+	b.installed = strings.Contains(dir, "/Applications/")
+	b.sysLib = strings.HasPrefix(dir, "/System/Library/") || strings.HasPrefix(dir, "/Library/Apple/")
+	return b, true
 }
 
 func systemPath(p string) bool {
+	if strings.HasPrefix(p, "/usr/local/") {
+		return false // Intel Homebrew and installer packages
+	}
 	for _, prefix := range []string{"/System/", "/usr/", "/bin/", "/sbin/", "/Library/Apple/"} {
 		if strings.HasPrefix(p, prefix) {
 			return true
@@ -162,7 +238,7 @@ func (t *Tracker) Update(now time.Time, rs []Reading) ([]Delta, error) {
 	t.based, t.last = true, now
 
 	sums := map[app]*Delta{}
-	var total uint64
+	var total float64 // float: garbage fields must not wrap under the limit
 	present := map[uint64]bool{}
 	for _, r := range rs {
 		present[r.Coalition] = true
@@ -201,7 +277,7 @@ func (t *Tracker) Update(now time.Time, rs []Reading) ([]Delta, error) {
 		s.CPU += d.CPU
 		s.GPU += d.GPU
 		s.ANE += d.ANE
-		total += d.CPU + d.GPU + d.ANE
+		total += float64(d.CPU) + float64(d.GPU) + float64(d.ANE)
 	}
 	for id, c := range t.seen {
 		if !present[id] {
@@ -213,7 +289,7 @@ func (t *Tracker) Update(now time.Time, rs []Reading) ([]Delta, error) {
 	if first {
 		return nil, nil
 	}
-	if w := float64(total) / 1e9 / max(elapsed, 1); w > maxWatts {
+	if w := total / 1e9 / max(elapsed, 1); w > maxWatts {
 		return nil, fmt.Errorf("%w: %.0f W over %.0f s", ErrImplausible, w, max(elapsed, 1))
 	}
 	if len(sums) == 0 {
@@ -230,4 +306,25 @@ func (t *Tracker) Update(now time.Time, rs []Reading) ([]Delta, error) {
 		return !out[i].System
 	})
 	return out, nil
+}
+
+// Fold merges each delta under 0.1 J into one Other row, tagged system so
+// it is never named the worst offender. Deltas stay sorted by app.
+func Fold(ds []Delta) []Delta {
+	var out []Delta
+	other := Delta{App: Other, System: true}
+	for _, d := range ds {
+		if d.CPU+d.GPU+d.ANE >= minDeltaNJ {
+			out = append(out, d)
+			continue
+		}
+		other.CPU += d.CPU
+		other.GPU += d.GPU
+		other.ANE += d.ANE
+	}
+	if other.CPU+other.GPU+other.ANE == 0 {
+		return out
+	}
+	i := sort.Search(len(out), func(i int) bool { return out[i].App >= Other })
+	return slices.Insert(out, i, other)
 }

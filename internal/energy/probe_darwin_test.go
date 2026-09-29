@@ -35,6 +35,18 @@ func TestReadLive(t *testing.T) {
 		}
 		return Reading{}, false
 	}
+	var cpu, gpu uint64
+	for _, r := range after {
+		cpu += r.CPU
+		gpu += r.GPU
+	}
+	if cpu == 0 {
+		// Seen on virtual Macs: the counters exist but the energy model does not.
+		t.Skip("every coalition reports 0 nJ: no energy counters on this machine")
+	}
+	if gpu == 0 {
+		t.Error("no coalition has GPU energy (WindowServer always draws): GPU field index moved?")
+	}
 	b, ok1 := find(before, self)
 	a, ok2 := find(after, self)
 	if !ok1 || !ok2 {
@@ -45,7 +57,7 @@ func TestReadLive(t *testing.T) {
 	}
 	// 300 ms of one busy core is well over 10 mJ on any Apple Silicon or Intel Mac.
 	if a.CPU < b.CPU+10e6 {
-		t.Errorf("own CPU energy rose %d nJ over 300 ms busy; field index moved?", a.CPU-b.CPU)
+		t.Errorf("own CPU energy went %d → %d nJ over 300 ms busy; field index moved?", b.CPU, a.CPU)
 	}
 	for _, r := range after {
 		if p, ok := find(before, r.Coalition); ok && (r.CPU < p.CPU || r.GPU < p.GPU || r.ANE < p.ANE) {
