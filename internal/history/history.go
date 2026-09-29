@@ -4,9 +4,13 @@
 package history
 
 import (
+	"errors"
 	"math"
+	"regexp"
+	"strconv"
 	"time"
 
+	"github.com/jufianto/batlog/internal/localday"
 	"github.com/jufianto/batlog/internal/pmset"
 	"github.com/jufianto/batlog/internal/store"
 )
@@ -51,6 +55,9 @@ type Event struct {
 
 // Session is one run on battery.
 type Session struct {
+	// ID is the start in local time as MMDD-HHMM; a later session starting
+	// in the same minute gets b, c, …. `top --session` takes it.
+	ID    string
 	Start int64
 	End   int64 // the plug event; 0 while ongoing
 	// AwakeMin and Drain are nil for pmset sessions; Drain is also nil with
@@ -101,6 +108,7 @@ func Build(in Input) Result {
 	r.Events = append(r.Events, events...)
 	r.Sessions = append(r.Sessions, sessions...)
 	r.Totals = totals
+	assignIDs(r.Sessions, in.From.Location())
 
 	// Already ascending: pmset events are all before the first sample.
 	for i := range r.Events {
@@ -117,6 +125,54 @@ func Build(in Input) Result {
 		r.Lasted = &Lasted{Minutes: *last.AwakeMin, Ongoing: last.Ongoing}
 	}
 	return r
+}
+
+const idLayout = "0102-1504"
+
+// assignIDs names sessions, which are in start order, by their start minute.
+func assignIDs(ss []Session, loc *time.Location) {
+	seen := map[string]int{}
+	for i := range ss {
+		id := time.Unix(ss[i].Start, 0).In(loc).Format(idLayout)
+		if n := seen[id]; n > 0 && n < 26 {
+			ss[i].ID = id + string(rune('a'+n))
+		} else {
+			ss[i].ID = id
+		}
+		seen[id]++
+	}
+}
+
+var idPattern = regexp.MustCompile(`^(\d\d)(\d\d)-(\d\d)(\d\d)[b-z]?$`)
+
+// IDDay returns the first instant of the local day a session ID started on.
+// IDs carry no year: it is the most recent one in which that minute exists
+// and is not after now. A history built from that day to now holds the
+// session under the same ID.
+func IDDay(id string, now time.Time) (time.Time, error) {
+	m := idPattern.FindStringSubmatch(id)
+	if m == nil {
+		return time.Time{}, errors.New("want a session ID like 0926-1656 (see batlog history)")
+	}
+	var v [4]int
+	for i := range v {
+		v[i], _ = strconv.Atoi(m[i+1])
+	}
+	month, day, hour, minute := time.Month(v[0]), v[1], v[2], v[3]
+	if hour > 23 || minute > 59 {
+		return time.Time{}, errors.New("session ID " + id + " has no such time")
+	}
+	loc := now.Location()
+	for y := now.Year(); y >= now.Year()-8; y-- {
+		noon := time.Date(y, month, day, 12, 0, 0, 0, loc)
+		if noon.Month() != month || noon.Day() != day {
+			continue // no such date this year (29 Feb)
+		}
+		if !time.Date(y, month, day, hour, minute, 0, 0, loc).After(now) {
+			return localday.Start(noon), nil
+		}
+	}
+	return time.Time{}, errors.New("session ID " + id + " has no such date")
 }
 
 // fromSamples walks consecutive batlog samples.

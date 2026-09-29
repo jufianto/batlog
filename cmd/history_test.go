@@ -89,8 +89,8 @@ func TestHistoryTodayHuman(t *testing.T) {
 		"battery lasted     ongoing, 1h 58m so far\n" +
 		"\n" +
 		"battery sessions\n" +
-		"  yesterday 23:10 → 01:00   1h 50m awake    100% → 90%   5.5 %/hr\n" +
-		"  02:00 → now               1h 58m so far   100% → 88%   5.6 %/hr   (ongoing)\n" +
+		"  0925-2310   yesterday 23:10 → 01:00   1h 50m awake    100% → 90%   5.5 %/hr\n" +
+		"  0926-0200   02:00 → now               1h 58m so far   100% → 88%   5.6 %/hr   (ongoing)\n" +
 		"\n" +
 		"on battery 2h 58m · on AC 1h 00m · asleep 8h 01m\n"
 	if got != want {
@@ -149,11 +149,14 @@ func TestHistoryJSON(t *testing.T) {
 	if len(j.Sessions) != 2 {
 		t.Fatalf("sessions = %v", j.Sessions)
 	}
-	keys := []string{"start", "end", "awake_minutes", "start_pct", "end_pct", "drain_pct_per_hr", "ongoing", "data_gap", "source"}
+	keys := []string{"id", "start", "end", "awake_minutes", "start_pct", "end_pct", "drain_pct_per_hr", "ongoing", "data_gap", "source"}
 	for _, k := range keys {
 		if _, ok := j.Sessions[1][k]; !ok {
 			t.Errorf("session missing %q", k)
 		}
+	}
+	if j.Sessions[0]["id"] != "0925-2310" || j.Sessions[1]["id"] != "0926-0200" {
+		t.Errorf("ids = %v, %v", j.Sessions[0]["id"], j.Sessions[1]["id"])
 	}
 	if j.Sessions[1]["end"] != nil || j.Sessions[0]["end"] != float64(histAt(60)) {
 		t.Errorf("ends = %v, %v; want 01:00 and null", j.Sessions[0]["end"], j.Sessions[1]["end"])
@@ -226,8 +229,8 @@ func TestHistoryPmsetFallback(t *testing.T) {
 	for _, w := range []string{
 		"first charge       00:10  (at 70%)  (pmset)\n",
 		"last on battery    00:30  (at 100%)  (pmset)\n",
-		"  00:30 → 01:00   —            100% → 98%              (pmset)\n",
-		"  01:00 → now     59m so far   97% → 94%    3.1 %/hr   (ongoing)\n",
+		"  0926-0030   00:30 → 01:00   —            100% → 98%              (pmset)\n",
+		"  0926-0100   01:00 → now     59m so far   97% → 94%    3.1 %/hr   (ongoing)\n",
 	} {
 		if !strings.Contains(got, w) {
 			t.Errorf("missing %q in\n%s", w, got)

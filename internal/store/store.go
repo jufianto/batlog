@@ -178,13 +178,19 @@ func (d *DB) SamplesSince(ctx context.Context, since int64) ([]Sample, error) {
 // EnergySince returns the buckets with start >= since, ordered by ts then
 // app. A database from before the apps table has none.
 func (d *DB) EnergySince(ctx context.Context, since int64) ([]AppEnergy, error) {
+	return d.EnergyBetween(ctx, since, math.MaxInt64)
+}
+
+// EnergyBetween returns the buckets with from <= start < to, ordered by ts
+// then app.
+func (d *DB) EnergyBetween(ctx context.Context, from, to int64) ([]AppEnergy, error) {
 	if ok, err := d.hasTable(ctx, "apps"); !ok {
 		return nil, err
 	}
 	rows, err := d.sql.QueryContext(ctx,
 		`SELECT e.ts, a.name, a.is_system, (e.cpu_nj + e.gpu_nj + e.ane_nj) / 1e9
 		 FROM app_energy e JOIN apps a ON a.id = e.app_id
-		 WHERE e.ts >= ? ORDER BY e.ts, a.name`, since)
+		 WHERE e.ts >= ? AND e.ts < ? ORDER BY e.ts, a.name`, from, to)
 	if err != nil {
 		return nil, err
 	}
@@ -198,6 +204,17 @@ func (d *DB) EnergySince(ctx context.Context, since int64) ([]AppEnergy, error) 
 		out = append(out, e)
 	}
 	return out, rows.Err()
+}
+
+// FirstEnergyTS is the oldest bucket start, 0 when no app energy is
+// recorded (or the database predates the apps table).
+func (d *DB) FirstEnergyTS(ctx context.Context) (int64, error) {
+	if ok, err := d.hasTable(ctx, "apps"); !ok {
+		return 0, err
+	}
+	var ts int64
+	err := d.sql.QueryRowContext(ctx, `SELECT COALESCE(MIN(ts), 0) FROM app_energy`).Scan(&ts)
+	return ts, err
 }
 
 // hasTable reports whether a table exists. Readers do not migrate: the

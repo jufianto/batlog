@@ -12,12 +12,14 @@ to F3.
 `MMDD-HHMM`. A later session in the same minute of the same build gets `b`,
 `c`, …. `history` prints the ID as the first column and as `id` in the JSON.
 
-`top` needs to resolve an ID, so `history.ParseID(id, now)` finds the start
-minute:
-- **Date:** the year that makes `MMDD` most recent and not in the future.
-- **Lookup:** build the local day that holds that minute, extended to now
-  (a session can run for days), then pick the session whose ID matches.
-- **`last`:** the newest session in the last 90 days.
+`top` needs to resolve an ID, so `history.IDDay(id, now)` finds the local
+day it started on:
+- **Date:** the year that makes `MMDD-HHMM` most recent and not in the
+  future (29 Feb goes back to the last leap year).
+- **Lookup:** build history from that day to now (a session can run for
+  days), then pick the session whose ID matches. Matching the ID string
+  rather than a converted time keeps DST's repeated hour right.
+- **`last`:** the newest session in the last 7 days, else in the last 90.
 
 ## Range energy (`internal/top`, pure)
 
@@ -47,9 +49,11 @@ over the session's samples, and sleep gaps break windows.
 
 ## Live mode
 
-Live mode calls `energy.Read` twice, 1 s apart, through the same `Tracker`.
-It is used on non-darwin only as `ErrUnsupported`, which exits 1 with the
-message.
+Live mode calls `energy.Read` twice, 1 s apart, through a fresh `Tracker`,
+and ranks the deltas by share only. Off macOS `energy.Read` returns
+`ErrUnsupported`, which exits 1 with its message. `--today` without any
+recorded app energy falls back to live mode, with the notice on stderr so
+`--json` output stays valid.
 
 ## CLI (`cmd/top.go`)
 

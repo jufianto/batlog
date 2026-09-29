@@ -137,6 +137,7 @@ func runCtx(t *testing.T, ctx context.Context, args ...string) (string, error) {
 		daemonOnce = false
 		daemonFollow = false
 		histToday, histWeek, histEvents, histSince = false, false, false, ""
+		topLive, topToday, topWeek, topSince, topSession, topN = false, false, false, "", "", 10
 	}
 	resetFlags()
 	t.Cleanup(func() {

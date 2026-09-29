@@ -254,8 +254,8 @@ func renderHistory(w io.Writer, r history.Result, t time.Time) {
 			if s.Source == history.SourcePmset {
 				tags = append(tags, "(pmset)")
 			}
-			fmt.Fprintf(tw, "  %s → %s\t%s\t%d%% → %d%%\t%s\t%s\n",
-				clock(s.Start, t), end, awake, s.StartPct, s.EndPct, drain, strings.Join(tags, " "))
+			fmt.Fprintf(tw, "  %s\t%s → %s\t%s\t%d%% → %d%%\t%s\t%s\n",
+				s.ID, clock(s.Start, t), end, awake, s.StartPct, s.EndPct, drain, strings.Join(tags, " "))
 		}
 		tw.Flush()
 	}
@@ -344,6 +344,7 @@ type eventJSON struct {
 }
 
 type sessionJSON struct {
+	ID            string   `json:"id"`
 	Start         int64    `json:"start"`
 	End           *int64   `json:"end"`
 	AwakeMinutes  *int     `json:"awake_minutes"`
@@ -397,7 +398,7 @@ func writeHistoryJSON(out io.Writer, rg timeRange, r history.Result) error {
 		j.BatteryLasted = &lastedJSON{r.Lasted.Minutes, r.Lasted.Ongoing}
 	}
 	for _, s := range r.Sessions {
-		sj := sessionJSON{Start: s.Start, AwakeMinutes: s.AwakeMin, StartPct: s.StartPct, EndPct: s.EndPct,
+		sj := sessionJSON{ID: s.ID, Start: s.Start, AwakeMinutes: s.AwakeMin, StartPct: s.StartPct, EndPct: s.EndPct,
 			DrainPctPerHr: s.Drain, Ongoing: s.Ongoing, DataGap: s.DataGap, Source: s.Source}
 		if !s.Ongoing {
 			end := s.End
