@@ -66,3 +66,17 @@ no energy (some virtual machines).
 - CI runs `go vet`, `go test` and `go build` on macOS and Linux.
 - Commit messages say what changed and why, e.g. `fix(top): …` or
   `feat(daemon): …`.
+
+## Releasing
+
+Releases are built with [GoReleaser](https://goreleaser.com) from
+`.goreleaser.yaml`. Until the release runs on GitHub Actions, run it on a
+Mac from a clean `master`:
+
+```sh
+git tag -a v0.2.0 -m v0.2.0 && git push origin v0.2.0
+GITHUB_TOKEN=$(gh auth token) goreleaser release --clean --release-notes notes.md
+```
+
+`goreleaser release --snapshot --clean` builds everything into `dist/`
+without publishing.

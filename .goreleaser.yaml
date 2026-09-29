@@ -1,0 +1,57 @@
+# GoReleaser v2. Run locally until GitHub Actions has quota again:
+#   GITHUB_TOKEN=$(gh auth token) goreleaser release --clean --release-notes <notes.md>
+# Dry run: goreleaser release --snapshot --clean
+version: 2
+
+project_name: batlog
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - main: .
+    binary: batlog
+    env:
+      - CGO_ENABLED=0 # ADR-0001: pure Go
+    goos:
+      - darwin
+    goarch:
+      - arm64
+      - amd64
+    flags:
+      - -trimpath
+    mod_timestamp: "{{ .CommitTimestamp }}"
+    ldflags:
+      - -s -w -X github.com/jufianto/batlog/cmd.version={{ .Version }}
+
+archives:
+  - formats: [tar.gz]
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    files:
+      - README.md
+      - LICENSE
+
+checksum:
+  name_template: checksums.txt
+
+snapshot:
+  version_template: "{{ incpatch .Version }}-next"
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - "^docs"
+      - "^test"
+      - "^wip"
+      - "^spike"
+      - "Merge pull request"
+
+release:
+  github:
+    owner: jufianto
+    name: batlog
+  # 0.x releases are pre-releases until the v1 feature set (F1–F7) is done.
+  prerelease: "true"
+  name_template: "v{{ .Version }}"
