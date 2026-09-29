@@ -69,7 +69,7 @@ var topCmd = &cobra.Command{
 		case topSince != "":
 			label = "since " + rg.From.Format("Mon 02 Jan 15:04")
 		}
-		return runTopRange(ctx, out, errw, rg, label)
+		return runTopRange(ctx, out, errw, rg, label, !topWeek && topSince == "")
 	},
 }
 
@@ -111,12 +111,18 @@ func loadHistory(ctx context.Context, db *store.DB, from, to time.Time) (history
 	return in, err
 }
 
-func runTopRange(ctx context.Context, out, errw io.Writer, rg timeRange, label string) error {
+// runTopRange ranks apps over rg. Without any recorded app energy, today's
+// view (the default) falls back to live; a --week or --since view has
+// nothing to show and says so.
+func runTopRange(ctx context.Context, out, errw io.Writer, rg timeRange, label string, liveFallback bool) error {
 	db, first, ok, err := openEnergyDB(ctx)
 	if err != nil {
 		return err
 	}
 	if !ok {
+		if !liveFallback {
+			return errors.New("no app energy recorded yet: `batlog daemon install` starts recording")
+		}
 		fmt.Fprintln(errw, "no app energy recorded yet (`batlog daemon install` records it); showing the last second")
 		return runTopLive(out, jsonOut, rg.To)
 	}
@@ -126,25 +132,57 @@ func runTopRange(ctx context.Context, out, errw io.Writer, rg timeRange, label s
 		return fmt.Errorf("reading history: %w", err)
 	}
 	tot := history.Build(in).Totals
-	rows, err := rankRange(ctx, db, in.Samples, rg.From.Unix(), rg.To.Unix(), tot.PctUsed)
+	rk, err := rankRange(ctx, db, in, rg.From.Unix(), rg.To.Unix(), first)
 	if err != nil {
 		return err
 	}
 	if jsonOut {
-		return writeTopJSON(out, rg.From.Unix(), rg.To.Unix(), tot, rows, nil)
+		return writeTopJSON(out, rg.From.Unix(), rg.To.Unix(), tot, rk, nil)
 	}
 	fmt.Fprintf(out, "⚡ top energy · %s   (%s awake, %s on battery, %d%% used)\n",
 		label, fmtDuration(int((tot.BatterySec+tot.ACSec)/60)), fmtDuration(int(tot.BatterySec/60)), tot.PctUsed)
-	renderTop(out, rows, tot, first, rg.To)
+	renderTop(out, rk, first, rg.To)
 	return nil
 }
 
-func rankRange(ctx context.Context, db *store.DB, samples []store.Sample, from, to int64, pctUsed int) ([]top.Row, error) {
+// ranked is a range's rows and the part of it app energy covers.
+type ranked struct {
+	rows []top.Row
+	// since is when app energy recording began, when that is inside the
+	// range; 0 when it covers the whole range.
+	since int64
+	// covered are the range's totals from since on. Battery cost spreads
+	// only covered.PctUsed: the percent used before recording began has no
+	// app energy to be attributed to.
+	covered history.Totals
+}
+
+func rankRange(ctx context.Context, db *store.DB, in history.Input, from, to, first int64) (ranked, error) {
+	var rk ranked
+	cin := in
+	cin.Pmset = nil
+	// first is the first bucket's start; recording began somewhere in it.
+	// A range that reaches into that bucket may predate recording, so it
+	// gets the note (at worst for 15 minutes too many).
+	if store.Bucket(from) <= first {
+		rk.since = first
+	}
+	cin.From = time.Unix(max(from, first), 0).In(in.To.Location())
+	cin.To = time.Unix(to, 0).In(in.To.Location())
+	rk.covered = history.Build(cin).Totals
 	buckets, err := db.EnergyBetween(ctx, store.Bucket(from), to)
 	if err != nil {
-		return nil, fmt.Errorf("reading app energy: %w", err)
+		return rk, fmt.Errorf("reading app energy: %w", err)
 	}
-	return top.Build(buckets, samples, from, to, pctUsed), nil
+	// top.Build weighs a bucket by its share of samples in the range, so it
+	// needs all of every overlapping bucket's samples: in.Samples can start
+	// inside the first one (history loads from the last AC sample).
+	samples, err := db.SamplesBetween(ctx, store.Bucket(from), store.Bucket(to-1)+store.BucketSec)
+	if err != nil {
+		return rk, fmt.Errorf("reading samples: %w", err)
+	}
+	rk.rows = top.Build(buckets, samples, from, to, rk.covered.PctUsed)
+	return rk, nil
 }
 
 func runTopSession(ctx context.Context, out, errw io.Writer, id string, t time.Time) error {
@@ -175,9 +213,9 @@ func runTopSession(ctx context.Context, out, errw io.Writer, id string, t time.T
 	sin := in
 	sin.From, sin.To, sin.Pmset = time.Unix(s.Start, 0).In(t.Location()), time.Unix(end, 0).In(t.Location()), nil
 	tot := history.Build(sin).Totals
-	var rows []top.Row
+	var rk ranked
 	if s.Source == history.SourceBatlog {
-		if rows, err = rankRange(ctx, db, in.Samples, s.Start, end, tot.PctUsed); err != nil {
+		if rk, err = rankRange(ctx, db, in, s.Start, end, first); err != nil {
 			return err
 		}
 	}
@@ -190,7 +228,7 @@ func runTopSession(ctx context.Context, out, errw io.Writer, id string, t time.T
 		if heavyOK {
 			sj.Heaviest = &heaviestJSON{heavy.Start, heavy.End, round1(heavy.AvgWatts)}
 		}
-		return writeTopJSON(out, s.Start, end, tot, rows, sj)
+		return writeTopJSON(out, s.Start, end, tot, rk, sj)
 	}
 
 	span := clock(s.Start, t) + " → now"
@@ -206,14 +244,11 @@ func runTopSession(ctx context.Context, out, errw io.Writer, id string, t time.T
 		drain += fmt.Sprintf(" (%.1f %%/hr)", *s.Drain)
 	}
 	fmt.Fprintln(out, joinDot(append(parts, drain)))
-	if len(rows) == 0 {
+	if len(rk.rows) == 0 {
 		fmt.Fprintf(out, "no app energy for this session (recording started %s)\n", clock(first, t))
 		return nil
 	}
-	renderTop(out, rows, tot, first, t)
-	if s.Start < store.Bucket(first) {
-		fmt.Fprintf(out, "app energy only from %s, when recording started\n", clock(first, t))
-	}
+	renderTop(out, rk, first, t)
 	if heavyOK {
 		fmt.Fprintf(out, "heaviest 30 min: %s → %s · %.1f W average\n",
 			clock(heavy.Start, t), time.Unix(heavy.End, 0).In(t.Location()).Format("15:04"), heavy.AvgWatts)
@@ -284,7 +319,7 @@ func runTopLive(out io.Writer, asJSON bool, t time.Time) error {
 	}
 	rows := top.Live(ds)
 	if asJSON {
-		j := liveJSON{Range: rangeJSON{t.Unix() - 1, t.Unix()}, Live: true, Rows: []liveRowJSON{}}
+		j := liveJSON{Range: rangeJSON{t.Unix(), t.Unix() + 1}, Live: true, Rows: []liveRowJSON{}}
 		for _, r := range rows[:min(topN, len(rows))] {
 			j.Rows = append(j.Rows, liveRowJSON{r.App, round4(r.Share), r.System, round1(r.EnergyJ)})
 		}
@@ -304,7 +339,8 @@ func runTopLive(out io.Writer, asJSON bool, t time.Time) error {
 	return nil
 }
 
-func renderTop(out io.Writer, rows []top.Row, tot history.Totals, first int64, t time.Time) {
+func renderTop(out io.Writer, rk ranked, first int64, t time.Time) {
+	rows := rk.rows
 	if len(rows) == 0 {
 		fmt.Fprintln(out, "no app energy recorded for this range")
 		fmt.Fprintf(out, "recording started %s\n", clock(first, t))
@@ -318,7 +354,7 @@ func renderTop(out io.Writer, rows []top.Row, tot history.Totals, first int64, t
 		if r.BatteryPct != nil {
 			switch p := *r.BatteryPct; {
 			case p > 0 && p < 0.5:
-				cost = "≈ < 1%"
+				cost = "< 1%"
 			default:
 				cost = fmt.Sprintf("≈ %.0f%%", p)
 			}
@@ -330,7 +366,11 @@ func renderTop(out io.Writer, rows []top.Row, tot history.Totals, first int64, t
 		fmt.Fprintf(tw, " %d\t%s\t%s\t%s\n", i+1, appLabel(r), pct(r.Share), cost)
 	}
 	tw.Flush()
-	if tot.BatterySec+tot.ACSec < 30*60 {
+	if rk.since != 0 {
+		fmt.Fprintf(out, "app energy from about %s only, when recording started; battery cost covers the %d%% used since\n",
+			clock(rk.since, t), rk.covered.PctUsed)
+	}
+	if rk.covered.BatterySec+rk.covered.ACSec < 30*60 {
 		fmt.Fprintln(out, "short window — shares may be noisy")
 	}
 	fmt.Fprintln(out, topFootnote)
@@ -377,12 +417,16 @@ type topSessionJSON struct {
 
 // topJSON is the schema from docs/specs/F4-top.md.
 type topJSON struct {
-	Range      rangeJSON       `json:"range"`
-	AwakeMin   int64           `json:"awake_min"`
-	BatteryMin int64           `json:"battery_min"`
-	PctUsed    int             `json:"pct_used"`
-	Rows       []topRowJSON    `json:"rows"`
-	Session    *topSessionJSON `json:"session,omitempty"`
+	Range      rangeJSON `json:"range"`
+	AwakeMin   int64     `json:"awake_min"`
+	BatteryMin int64     `json:"battery_min"`
+	PctUsed    int       `json:"pct_used"`
+	// EnergySince is when app energy recording began, when inside the
+	// range; est_battery_pct then sums to CostPctUsed, not PctUsed.
+	EnergySince *int64          `json:"energy_since"`
+	CostPctUsed int             `json:"cost_pct_used"`
+	Rows        []topRowJSON    `json:"rows"`
+	Session     *topSessionJSON `json:"session,omitempty"`
 }
 
 type liveRowJSON struct {
@@ -398,9 +442,13 @@ type liveJSON struct {
 	Rows  []liveRowJSON `json:"rows"`
 }
 
-func writeTopJSON(out io.Writer, from, to int64, tot history.Totals, rows []top.Row, s *topSessionJSON) error {
+func writeTopJSON(out io.Writer, from, to int64, tot history.Totals, rk ranked, s *topSessionJSON) error {
 	j := topJSON{Range: rangeJSON{from, to}, AwakeMin: (tot.BatterySec + tot.ACSec) / 60,
-		BatteryMin: tot.BatterySec / 60, PctUsed: tot.PctUsed, Rows: []topRowJSON{}, Session: s}
+		BatteryMin: tot.BatterySec / 60, PctUsed: tot.PctUsed, CostPctUsed: rk.covered.PctUsed, Rows: []topRowJSON{}, Session: s}
+	if rk.since != 0 {
+		j.EnergySince = &rk.since
+	}
+	rows := rk.rows
 	for _, r := range rows[:min(topN, len(rows))] {
 		var est *float64
 		if r.BatteryPct != nil {

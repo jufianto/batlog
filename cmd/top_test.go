@@ -66,9 +66,11 @@ func TestTopTodayHuman(t *testing.T) {
 	}
 	want := "⚡ top energy · today   (3h 58m awake, 2h 58m on battery, 17% used)\n" +
 		" #   APP              SHARE   BATTERY COST\n" +
-		" 1   Brave Browser    50%     ≈ 13% of battery\n" +
+		" 1   Brave Browser    50%     ≈ 8% of battery\n" +
 		" 2   Xcode            33%     ≈ 0%\n" +
-		" 3   WindowServer ⚙   17%     ≈ 4%\n" +
+		" 3   WindowServer ⚙   17%     ≈ 3%\n" +
+		// 00:00–01:00 used 6% with no app energy recorded: nobody is charged for it.
+		"app energy from about 01:00 only, when recording started; battery cost covers the 11% used since\n" +
 		topFootnote + "\n"
 	if got != want {
 		t.Errorf("got:\n%s\nwant:\n%s", got, want)
@@ -82,8 +84,10 @@ func TestTopJSONAndLimit(t *testing.T) {
 		t.Fatal(err)
 	}
 	var j struct {
-		PctUsed int `json:"pct_used"`
-		Rows    []struct {
+		PctUsed     int    `json:"pct_used"`
+		CostPctUsed int    `json:"cost_pct_used"`
+		EnergySince *int64 `json:"energy_since"`
+		Rows        []struct {
 			App      string   `json:"app"`
 			Share    float64  `json:"share"`
 			Est      *float64 `json:"est_battery_pct"`
@@ -96,7 +100,8 @@ func TestTopJSONAndLimit(t *testing.T) {
 		t.Fatalf("%v in %s", err, out)
 	}
 	if len(j.Rows) != 2 || j.Rows[0].App != "Brave Browser" || j.Rows[0].Share != 0.5 || j.Rows[0].EnergyJ != 300 ||
-		j.Rows[1].Est == nil || *j.Rows[1].Est != 0 || j.Session != nil {
+		j.Rows[1].Est == nil || *j.Rows[1].Est != 0 || j.Session != nil ||
+		j.PctUsed != 17 || j.CostPctUsed != 11 || j.EnergySince == nil || *j.EnergySince != histAt(60) {
 		t.Errorf("json = %s", out)
 	}
 }
@@ -178,5 +183,36 @@ func TestTopLiveJSON(t *testing.T) {
 	}
 	if !strings.Contains(out, `"live":true`) || !strings.Contains(out, `{"app":"zoom.us","share":0.75,"is_system":false,"energy_j":3}`) || strings.Contains(out, "est_battery_pct") {
 		t.Errorf("json = %s", out)
+	}
+}
+
+func TestTopSinceWeighsAStraddledBucketByAllItsSamples(t *testing.T) {
+	// --since 10h at 11:59 starts at 01:59, inside the 01:45 bucket (on AC):
+	// 1 of its 15 samples is in range, so 10 of Xcode's 150 J count.
+	stubTop(t, 719, [4]any{105, "Xcode", 150.0, false}, [4]any{660, "Brave Browser", 100.0, false})
+	out, err := run(t, "top", "--since", "10h", "--json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var j struct {
+		Rows []struct {
+			App     string  `json:"app"`
+			EnergyJ float64 `json:"energy_j"`
+		} `json:"rows"`
+	}
+	if err := json.Unmarshal([]byte(out), &j); err != nil {
+		t.Fatalf("%v in %s", err, out)
+	}
+	if len(j.Rows) != 2 || j.Rows[0].App != "Brave Browser" || j.Rows[0].EnergyJ != 100 || j.Rows[1].EnergyJ != 10 {
+		t.Errorf("rows = %+v, want Brave 100 J then Xcode 10 J", j.Rows)
+	}
+}
+
+func TestTopWeekWithoutEnergyDoesNotGoLive(t *testing.T) {
+	stubTop(t, 719)
+	_, err := run(t, "top", "--week")
+	var ue usageError
+	if err == nil || errors.As(err, &ue) || !strings.Contains(err.Error(), "no app energy recorded yet") {
+		t.Errorf("err = %v, want an operational error, not a live view", err)
 	}
 }

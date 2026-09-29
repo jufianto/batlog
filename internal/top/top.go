@@ -81,6 +81,7 @@ func Build(buckets []store.AppEnergy, samples []store.Sample, from, to int64, pc
 	if total <= 0 {
 		return nil
 	}
+	pctUsed = max(pctUsed, 0) // a gauge that rose on battery used nothing
 	rows := make([]Row, 0, len(apps))
 	for name, a := range apps {
 		r := Row{App: name, System: a.system, Share: a.all / total, EnergyJ: a.all}
@@ -140,7 +141,9 @@ func Heaviest(samples []store.Sample, from, to int64) (Window, bool) {
 		}
 		if covered && n > 0 {
 			if avg := sum / float64(n); !found || avg > best.AvgWatts {
-				best = Window{ss[i].TS, ss[i].TS + windowSec, avg}
+				// covered lets the window end up to gapSec past its last
+				// sample; never past the range (now, or the plug-in).
+				best = Window{ss[i].TS, min(ss[i].TS+windowSec, to), avg}
 				found = true
 			}
 		}

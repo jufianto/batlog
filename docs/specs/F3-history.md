@@ -54,6 +54,11 @@ Each session has an **ID**: its start in local time as `MMDD-HHMM`
 (`0926-1656`). A second session starting in the same minute gets `b`, `c`,
 …. `batlog top --session <id>` (F4) shows which apps drained it.
 
+Suffixes are counted within the range shown. `top` resolves an ID over a
+history from the start of its day, so the two agree unless a `--since`
+range starts between two sessions of the same minute. That is rare enough
+to leave alone.
+
 ## Edge cases
 
 | Case | Behaviour |

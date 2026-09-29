@@ -115,6 +115,17 @@ func TestHeaviest(t *testing.T) {
 		t.Errorf("Heaviest = %+v %v, want 1800-3600 at 25 W", h, ok)
 	}
 
+	// A 2-minute hole inside 40 minutes of heavy use: no window spans it.
+	ss = append(minutes(0, 1200, false, 30), minutes(1320, 2400, false, 30)...)
+	ss = append(ss, minutes(2400, 4200, false, 10)...)
+	if h, ok := Heaviest(ss, 0, 4200); !ok || h.Start < 1320 {
+		t.Errorf("Heaviest = %+v %v, want a window after the hole", h, ok)
+	}
+	// The end never passes the range's end.
+	if h, ok := Heaviest(minutes(0, 1770, false, 9), 0, 1771); !ok || h.End != 1771 {
+		t.Errorf("Heaviest = %+v %v, want the end clamped to 1771", h, ok)
+	}
+
 	// A sleep gap breaks a window; AC samples are not battery drain.
 	ss = append(minutes(0, 1200, false, 30), minutes(4000, 5200, false, 30)...)
 	ss = append(ss, minutes(5200, 7000, true, 60)...)
@@ -127,5 +138,12 @@ func TestLive(t *testing.T) {
 	rows := Live([]energy.Delta{{App: "Zoom", CPU: 3e9, GPU: 1e9}, {App: "kernel_task", System: true, CPU: 1e9}})
 	if len(rows) != 2 || rows[0].App != "Zoom" || rows[0].Share != 0.8 || rows[0].EnergyJ != 4 || rows[0].BatteryPct != nil || !rows[1].System {
 		t.Errorf("Live = %+v", rows)
+	}
+}
+
+func TestNegativePercentUsedCostsNothing(t *testing.T) {
+	rows := Build([]store.AppEnergy{e(0, "Xcode", 10)}, minutes(0, 900, false, 5), 0, 900, -1)
+	if len(rows) != 1 || rows[0].BatteryPct == nil || *rows[0].BatteryPct != 0 {
+		t.Errorf("rows = %+v, want 0%% when the gauge rose", rows)
 	}
 }

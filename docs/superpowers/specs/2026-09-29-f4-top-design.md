@@ -37,15 +37,24 @@ were on battery.
 For each app:
 - **Share** is `Σ w·E` ÷ the same over all apps.
 - **Battery cost** is `(Σ wb·E ÷ Σ over all apps) × pct_used`, where
-  `pct_used` is F3's `Totals.PctUsed` for the range. With no battery time
-  the cost is `nil`.
+  `pct_used` is F3's `Totals.PctUsed` for the part of the range from the
+  first app energy bucket on. The percent used before recording began has
+  nothing to be attributed to (found on the first live run: 3 minutes of
+  energy were charged a whole day's 60 %). A negative `pct_used` counts
+  as 0. With no battery time the cost is `nil`.
+
+  Bucket weights need every sample of every overlapping bucket, so `top`
+  loads samples from the first bucket's start. History's sample load can
+  begin inside it, which over-weighted it for `--since 12h`.
 
 Rows are sorted by share desc, then name asc, and cut to `-n`. Each row's
-`energy_j` is `Σ w·E / 1e9`.
+`energy_j` is `Σ w·E`; the store already returns joules.
 
 **Heaviest 30 min** (sessions only) is the 30-minute window of consecutive
-awake samples with the highest mean `watts`. It is found with a sliding sum
-over the session's samples, and sleep gaps break windows.
+awake samples with the highest mean `watts`. Each on-battery sample starts
+a candidate window. Sleep gaps and AC samples break windows, the end is
+clamped to the session's end, and all-zero power means there is no
+answer.
 
 ## Live mode
 
@@ -68,6 +77,6 @@ notice. The database is opened read-only, as `history` does.
   no samples, an AC-only app costing `0%`, and the sums-to-100 and
   sums-to-`pct_used` invariants.
 - Session ID generation: a suffix in the same minute, a session crossing
-  midnight, and the year boundary in `ParseID` (`1231-2350` read on 1 Jan).
+  midnight, and the year boundary in `IDDay` (`1231-2350` read on 1 Jan).
 - cmd golden tests for `--today`, `--session`, not found (exit 1), the
   exclusive flags (exit 2), `--json` and `-n`.
