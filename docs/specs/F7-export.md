@@ -24,7 +24,7 @@ Default `--csv` to stdout. `--since` defaults to everything still in raw form
 
 ```
 samples   ts, pct, on_ac, charging, watts, raw_cur_mah, raw_max_mah
-apps      ts, app, energy, cpu_pct, is_system
+apps      ts, app, is_system, cpu_j, gpu_j, ane_j            -- one row per app per 15-min bucket
 health    day, cycles, raw_max_mah, nominal_mah, design_mah, health_pct, temp_c, condition
 ```
 

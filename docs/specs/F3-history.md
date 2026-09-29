@@ -40,15 +40,19 @@ first charge       07:42  (at 31%)
 last on battery    13:05  (at 100%)
 
 battery sessions
-  09:12 → 14:05   4h 53m awake   100% → 8%    18.8 %/hr
-  15:30 → now     1h 12m so far   95% → 81%   11.6 %/hr   (ongoing)
+  0926-0912  09:12 → 14:05   4h 53m awake   100% → 8%    18.8 %/hr
+  0926-1530  15:30 → now     1h 12m so far   95% → 81%   11.6 %/hr   (ongoing)
 
 on battery 6h 05m · on AC 4h 12m · asleep 1h 40m
 ```
 
-JSON: `{range, first_charge, last_unplug, sessions: [{start, end,
+JSON: `{range, first_charge, last_unplug, sessions: [{id, start, end,
 awake_minutes, start_pct, end_pct, drain_pct_per_hr, ongoing, source}],
 totals: {battery_min, ac_min, sleep_min}}`.
+
+Each session has an **ID**: its start in local time as `MMDD-HHMM`
+(`0926-1656`). A second session starting in the same minute gets `b`, `c`,
+…. `batlog top --session <id>` (F4) shows which apps drained it.
 
 ## Edge cases
 

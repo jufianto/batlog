@@ -25,7 +25,8 @@ No other flags. Must answer in under 1 s.
      the estimate is over 12 h, or the rate is 0, show `> 12h` instead of a
      number. JSON `est_minutes_left` keeps the minutes whenever the rate is
      above 0, and is `null` only at a rate of 0.
-   - **Worst offender** = app with the highest `SUM(energy)` in the window.
+   - **Worst offender** = the non-system app with the most energy in the
+     `app_energy` buckets of the last 15 minutes (F4 has the data source).
 3. Render. Anything that cannot be computed is omitted (human) or `null`
    (JSON). Never guessed.
 
