@@ -1,72 +1,123 @@
 # F4 — `batlog top`
 
-**Story:** As a user, I want to know which apps use the most energy — right
-now *and* accumulated over the day or week — so I know what to quit or
-replace. The accumulated view is the reason batlog exists.
+**Story:** As a user, I want to know which apps use the most energy, right
+now *and* accumulated over a day, a week or one battery session, so I know
+what to quit or replace, and why a charge drained fast. The accumulated view
+is the reason batlog exists.
 
 ## CLI contract
 
 ```
-batlog top [--live] [--today] [--week] [--since <dur>] [-n N] [--json]
+batlog top [--live] [--today] [--week] [--since <dur|date>] [--session <id|last>] [-n N] [--json]
 ```
 
-Default: `--today` if daemon data exists, else `--live`. `-n` default 10.
+- **Default:** `--today` if the daemon has recorded app energy, else
+  `--live`.
+- **`-n`:** default 10.
+- **Range flags** are the same as `history` (F3), and the same
+  one-range-only rule applies (exit 2).
+- **`--session`** takes a session ID from `batlog history` (e.g. `0926-1656`)
+  or `last`.
+
+## Data
+
+The source is per-app energy from the kernel's coalition counters
+([ADR-0006](../adr/0006-app-energy-from-kernel-coalition-counters.md)). A
+coalition is the responsible-app group Activity Monitor uses. It includes the
+app's helpers, its short-lived children and energy the app spent through
+processes that have since exited.
+
+- **The daemon (F5)** stores each app's CPU, GPU and Neural Engine energy in
+  15-minute buckets (`app_energy`).
+- **Live mode** reads the counters twice, 1 s apart, and needs no daemon.
+
+Apps without an app bundle that run from system paths (`WindowServer`,
+`kernel_task`, `mds_stores`, …) are tagged `system` and shown with ⚙.
+Activity Monitor hides them. batlog shows them because they are real drain,
+but never names one as the worst offender.
 
 ## Behaviour
 
-**Live:** run `top -l 2 -o power -n 40 -stats pid,command,power,cpu,mem`
-([ADR-0003](../adr/0003-app-energy-from-top-without-sudo.md)). Use the
-second sample only; the first always reads zero. Group, rank by energy, show
-the top N with share = energy / total.
+**Share** is an app's energy ÷ all apps' energy in the range.
 
-**Accumulated:**
-```sql
-SELECT app, SUM(energy) AS e FROM app_energy
-WHERE ts BETWEEN ? AND ? GROUP BY app ORDER BY e DESC LIMIT ?
-```
-share = e / SUM over all apps in the range. **Estimated battery cost** =
-share × total battery percent consumed while discharging in the range,
-rendered as `≈ 31% of your battery`.
+- A bucket that lies partly outside the range counts in proportion to how
+  much of it lies inside.
+- The proportion comes from the minute samples, or from time when the bucket
+  has none.
 
-**Grouping (shared with the daemon, one function):**
-1. Strip ` Helper`, ` Helper (Renderer)`, ` Helper (GPU)`, ` Helper (Plugin)`
-   → the parent app's name.
-2. Otherwise group by command name. `kernel_task`, `WindowServer`, `mds*`,
-   `coreaudiod` and other known system processes are tagged `system` and shown
-   with ⚙.
+**Battery cost** is the app's share of *on-battery* energy × the percent
+consumed while awake on battery in the range. The percent comes from F3's
+awake intervals.
+
+- A bucket's on-battery part is its fraction of in-range samples that were on
+  battery.
+- Cost is rendered as `≈ 31% of battery`, or `—` when the range had no
+  battery time.
+- Shares sum to 100 %, and battery costs sum to the percent consumed.
+
+**`--session <id>`**:
+- The range is that battery session (F3): from unplug to plug-in, or to now.
+- The header repeats the session line.
+- It adds the session's heaviest 30 awake minutes by average watts, from
+  `samples`.
+
+A session ID is its start in local time as `MMDD-HHMM`. The date is the most
+recent one not in the future; a second session starting in the same minute
+gets `b`, `c`, ….
 
 ## Output
 
 Human, `--today`:
 ```
-⚡ top energy · today   (9h 17m tracked, 6h 05m on battery)
- #  APP                SHARE   EST. BATTERY COST
+⚡ top energy · today   (9h 17m awake, 6h 05m on battery, 64% used)
+ #  APP                SHARE   BATTERY COST
  1  Google Chrome       34%    ≈ 31% of battery
- 2  Docker              18%    ≈ 17%
- 3  WindowServer ⚙      11%    ≈ 10%
+ 2  OrbStack            18%    ≈ 12%
+ 3  WindowServer ⚙      11%    ≈ 7%
  …
-shares are relative (Apple energy-impact units); battery cost is an estimate
+shares are of app energy (kernel counters); battery cost is an estimate
 ```
 
-JSON: `{range, tracked_minutes, rows: [{app, energy_share, est_battery_pct,
-is_system}]}`. Live mode adds `pid`, `cpu_pct`, `mem_mb` per row.
+Human, `--session 0926-1656`:
+```
+⚡ session 0926-1656 · Sat 26 Sep 16:56 → Sun 27 Sep 01:40 · 2h 14m awake · 100% → 20% (34.9 %/hr)
+ #  APP                SHARE   BATTERY COST
+ 1  Brave Browser       49%    ≈ 39% of battery
+ 2  WindowServer ⚙      15%    ≈ 12%
+ …
+heaviest 30 min: Sun 00:40 → 01:10 · 28.4 W average
+```
+
+Human, `--live`: `⚡ top energy · live (1 s)`, with SHARE only; no battery
+column.
+
+JSON:
+- `{range, awake_min, battery_min, pct_used, rows: [{app, share, est_battery_pct, is_system, energy_j}]}`
+- `--session` adds `session: {id, start, end, ongoing, heaviest: {start, end, avg_watts}}`.
+- `--live` has `rows` with `share`, `is_system` and `energy_j` only.
+- `share` is 0–1. `est_battery_pct` is `null` without battery time. Rows are
+  ordered by share desc, then name asc.
 
 ## Edge cases
 
 | Case | Behaviour |
 |---|---|
-| `--today` but no daemon data | Fall back to `--live` with a notice |
-| App ran only while on AC | Appears in share with `est_battery_pct: 0` |
-| < 30 min tracked in range | Show the table + `short window — shares may be noisy` |
-| `top` columns not recognised | Exit 1 naming the macOS version; never print partial rows |
-| Two apps with the same command name | Merged (documented limitation) |
+| No app energy recorded for the range | `no app energy recorded for this range` + when recording started, exit 0 |
+| `--today` but no daemon data at all | Fall back to `--live` with a notice |
+| `--session` ID not found | Exit 1: `no battery session <id> in the last 90 days — see batlog history` |
+| `--session` of a `(pmset)` session, or before energy recording began | The session header + `no app energy for this session (recording started <date>)` |
+| App ran only while on AC | In the share, with battery cost `0%` |
+| < 30 min awake in range | Show the table + `short window — shares may be noisy` |
+| Counters look implausible on some macOS | The daemon logs it and skips energy for that tick (F5); `top` shows what was recorded |
 
 ## Acceptance criteria
 
-- [ ] Live top 3 matches Activity Monitor's Energy tab order in a manual
-      spot check.
-- [ ] Chrome and all its helpers appear as one `Google Chrome` row (fixture).
-- [ ] Accumulated shares sum to 100 ± 1 %; battery-cost column sums to at most
-      the percent consumed.
-- [ ] `-n 25 --json` returns ≤ 25 rows, ordered energy desc then name asc.
-- [ ] The parser has golden-file tests for macOS 12, 14 and 15 `top` output.
+- [ ] Over a day, the top 3 non-system apps match Activity Monitor's *12 hr
+      Power* order in 4 of 5 spot checks (PRD metric 2).
+- [ ] All of Chrome's helpers and children appear as one `Google Chrome` row
+      (fixture of coalition members).
+- [ ] Shares sum to 100 ± 1 %; battery costs sum to the percent consumed ± 1.
+- [ ] `--session <id>` from `batlog history` round-trips, including a session
+      that crosses midnight and a second session in the same minute.
+- [ ] `-n 25 --json` returns ≤ 25 rows, ordered share desc then name asc.
+- [ ] batlog's own daemon never appears in its own top 10 over a day (PRD metric 3).

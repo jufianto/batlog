@@ -1,6 +1,6 @@
 # ADR-0003: Per-app energy comes from `top -o power`, shown as a relative share
 Date: 2026-09-26
-Status: accepted
+Status: superseded by [ADR-0006](./0006-app-energy-from-kernel-coalition-counters.md) (2026-09-29): `top` ranked apps wrongly and cost 3–5 % of the energy it measured
 
 ## Context
 The product's core is "which apps cost me the most battery over the week".

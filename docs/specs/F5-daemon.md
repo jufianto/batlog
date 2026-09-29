@@ -27,7 +27,11 @@ batlog daemon install | uninstall | status | logs [-f] | run [--once]
 
 **run loop, every 60 s**
 1. Battery probe (`ioreg`) → one `samples` row.
-2. Energy probe (`top`, grouped, top 15) → `app_energy` rows. Same transaction.
+2. Energy probe (kernel coalition counters,
+   [ADR-0006](../adr/0006-app-energy-from-kernel-coalition-counters.md)): each
+   app's rise in CPU, GPU and Neural Engine energy since the previous tick is
+   added to its current 15-minute `app_energy` bucket. Same transaction. The
+   first read after the recorder starts is a baseline and adds nothing.
 3. Once per calendar day (first tick after midnight or after boot): write a
    `health` row (`day` = local date as `YYYY-MM-DD`; upsert, so a second
    write the same day updates the first but never blanks a value it lacks);

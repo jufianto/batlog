@@ -8,6 +8,7 @@ Easily reversible choices do not get an ADR — pick one and move on.
 |---|---|---|
 | [0001](./0001-pure-go-no-cgo.md) | Pure Go, built with `CGO_ENABLED=0` | Accepted |
 | [0002](./0002-battery-via-ioreg-plist.md) | Battery data comes from `ioreg` plist output, not the IOKit API | Accepted |
-| [0003](./0003-app-energy-from-top-without-sudo.md) | Per-app energy comes from `top -o power`, shown as a relative share | Accepted |
+| [0003](./0003-app-energy-from-top-without-sudo.md) | Per-app energy comes from `top -o power`, shown as a relative share | Superseded by 0006 |
 | [0004](./0004-daemon-is-a-per-user-launchagent.md) | The recorder is a per-user LaunchAgent that owns its own history | Accepted |
 | [0005](./0005-data-in-application-support.md) | Data lives in `~/Library/Application Support/batlog/` | Accepted |
+| [0006](./0006-app-energy-from-kernel-coalition-counters.md) | Per-app energy comes from the kernel's coalition energy counters | Accepted |

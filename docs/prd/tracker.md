@@ -54,3 +54,5 @@ Every command supports `--json`. Behaviour lives in `docs/specs/`, one spec per 
 Sampling `top -l 2 -o power` once a minute and summing it over a day produces a per-app ranking that matches reality — and the sampling costs less battery than it measures.
 
 **Test (2 days, no Go):** a shell loop that appends `top -l 2 -o power -stats pid,command,power` to a CSV every 60 s. Each evening, compare the summed ranking with Activity Monitor's *12 hr Power* column, and check the loop's own cost in `top`. If the rankings disagree, rethink the data source before building `top` or the recorder.
+
+**Result (2026-09-29):** the rankings disagreed and the loop cost 3–5 % of the energy it measured. The kernel's per-app coalition energy counters matched Activity Monitor's top 8 in the same order, at 0.004 % cost, so batlog uses those instead ([ADR-0006](../adr/0006-app-energy-from-kernel-coalition-counters.md)).
