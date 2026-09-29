@@ -10,6 +10,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/jufianto/batlog/internal/battery"
+	"github.com/jufianto/batlog/internal/energy"
 	"github.com/jufianto/batlog/internal/paths"
 	"github.com/jufianto/batlog/internal/status"
 	"github.com/jufianto/batlog/internal/store"
@@ -18,6 +19,7 @@ import (
 // Swapped by tests so nothing shells out or touches the real data directory.
 var (
 	readBattery = battery.Read
+	readEnergy  = energy.Read
 	dbPath      = paths.DB
 	now         = time.Now
 )

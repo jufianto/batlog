@@ -433,7 +433,7 @@ func runRecorder(ctx context.Context, out io.Writer, once bool) error {
 		}
 	}
 
-	rec := &recorder.Recorder{DB: db, Read: readBattery, Now: now, Log: logger}
+	rec := &recorder.Recorder{DB: db, Read: readBattery, Now: now, Log: logger, ReadEnergy: readEnergy}
 	if once {
 		if err := rec.Start(ctx); err != nil {
 			return err

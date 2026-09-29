@@ -15,6 +15,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/jufianto/batlog/internal/battery"
+	"github.com/jufianto/batlog/internal/energy"
 	"github.com/jufianto/batlog/internal/launchd"
 	"github.com/jufianto/batlog/internal/recorder"
 	"github.com/jufianto/batlog/internal/store"
@@ -71,7 +72,8 @@ func stubDaemon(t *testing.T) *daemonEnv {
 		ctl:   &fakeCtl{},
 	}
 	stubStatus(t, battery.Snapshot{Percent: 67, Watts: 8.4, HasWatts: true}, e.db)
-	oldAgent, oldLog, oldCtl, oldExe, oldHome, oldWoke := agentPath, logPath, newCtl, executable, homeDir, wokeAt
+	oldAgent, oldLog, oldCtl, oldExe, oldHome, oldWoke, oldEnergy := agentPath, logPath, newCtl, executable, homeDir, wokeAt, readEnergy
+	readEnergy = func(func(uint64) bool) ([]energy.Reading, error) { return nil, nil }
 	wokeAt = func() (time.Time, time.Time, bool) { return time.Time{}, time.Time{}, false }
 	agentPath = func() (string, error) { return e.agent, nil }
 	logPath = func() (string, error) { return e.log, nil }
@@ -81,7 +83,7 @@ func stubDaemon(t *testing.T) *daemonEnv {
 	t.Setenv("BATLOG_HOME", "")
 	t.Setenv("XPC_SERVICE_NAME", "") // as in a terminal, not under launchd
 	t.Cleanup(func() {
-		agentPath, logPath, newCtl, executable, homeDir, wokeAt = oldAgent, oldLog, oldCtl, oldExe, oldHome, oldWoke
+		agentPath, logPath, newCtl, executable, homeDir, wokeAt, readEnergy = oldAgent, oldLog, oldCtl, oldExe, oldHome, oldWoke, oldEnergy
 	})
 	return e
 }

@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/jufianto/batlog/internal/battery"
+	"github.com/jufianto/batlog/internal/energy"
 	"github.com/jufianto/batlog/internal/rollup"
 	"github.com/jufianto/batlog/internal/store"
 )
@@ -327,5 +328,56 @@ func TestRollupFailureDoesNotSkipTheTick(t *testing.T) {
 	want := "rolled up 2 days (2026-06-01 → 2026-06-02)\nrollup failed: disk I/O error\n"
 	if got := e.logs.String(); got != want {
 		t.Errorf("log = %q, want %q", got, want)
+	}
+}
+
+func TestTickRecordsAppEnergy(t *testing.T) {
+	e := newEnv(t)
+	ctx := context.Background()
+	chrome := energy.Member{PID: 1, Path: "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"}
+	counters := []uint64{100e9, 130e9, 130e9, 0, 0, 12e9}
+	errs := map[int]error{3: errors.New("sysctl: EPERM"), 4: errors.New("sysctl: EPERM")}
+	n := 0
+	e.rec.ReadEnergy = func(named func(uint64) bool) ([]energy.Reading, error) {
+		defer func() { n++ }()
+		if err := errs[n]; err != nil {
+			return nil, err
+		}
+		r := energy.Reading{Coalition: 7, CPU: counters[n]}
+		if !named(7) {
+			r.Members = []energy.Member{chrome}
+		}
+		return []energy.Reading{r}, nil
+	}
+	for range len(counters) {
+		if err := e.rec.Tick(ctx); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// Tick 1 is the baseline, tick 2 adds 30 J, ticks 4-5 fail but keep
+	// their samples, tick 6 re-reads from 0 (a counter going backwards)
+	// and is skipped.
+	if n, _, _ := e.db.SampleStats(ctx); n != len(counters) {
+		t.Errorf("samples = %d, want every tick even when energy fails", n)
+	}
+	got, err := e.db.EnergySince(ctx, 0)
+	if err != nil || len(got) != 1 || got[0].App != "Google Chrome" || got[0].Energy != 30 {
+		t.Errorf("energy = %+v, %v; want Google Chrome 30 J", got, err)
+	}
+	if c := strings.Count(e.logs.String(), "app energy skipped: sysctl: EPERM"); c != 1 {
+		t.Errorf("logs:\n%s\nwant the failure logged once while it lasts", e.logs)
+	}
+	if !strings.Contains(e.logs.String(), "went backwards") {
+		t.Errorf("logs:\n%s\nwant the decrease logged", e.logs)
+	}
+}
+
+func TestTickWithoutEnergyProbe(t *testing.T) {
+	e := newEnv(t) // ReadEnergy nil: battery only, as on the pre-ADR-0006 daemon
+	if err := e.rec.Tick(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := e.db.EnergySince(context.Background(), 0); got != nil {
+		t.Errorf("energy = %+v", got)
 	}
 }

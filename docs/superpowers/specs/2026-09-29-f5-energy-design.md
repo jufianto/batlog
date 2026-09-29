@@ -96,7 +96,8 @@ transaction as the sample:
 - each delta is added to the `(bucket(now), app_id)` row with
   `INSERT … ON CONFLICT DO UPDATE SET cpu_nj = cpu_nj + excluded.cpu_nj, …`.
 
-The recorder caches app ids.
+App ids are not cached. About 40 upserts a minute is nothing for SQLite,
+and without a cache there is nothing to go stale.
 
 Failure rules:
 - A failed battery read skips the whole tick, as before. The tracker is not

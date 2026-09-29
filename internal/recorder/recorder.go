@@ -1,5 +1,6 @@
 // Package recorder is the daemon's loop: once a minute, read the battery and
-// write one tick to the store (docs/specs/F5-daemon.md).
+// the apps' energy counters and write one tick to the store
+// (docs/specs/F5-daemon.md).
 package recorder
 
 import (
@@ -12,6 +13,7 @@ import (
 	"time"
 
 	"github.com/jufianto/batlog/internal/battery"
+	"github.com/jufianto/batlog/internal/energy"
 	"github.com/jufianto/batlog/internal/health"
 	"github.com/jufianto/batlog/internal/rollup"
 	"github.com/jufianto/batlog/internal/store"
@@ -28,8 +30,13 @@ type Recorder struct {
 	Log  *log.Logger
 	// Rollup prunes raw rows older than 90 days; nil means rollup.Run.
 	Rollup func(context.Context, *store.DB, time.Time) (rollup.Result, error)
+	// ReadEnergy reads the coalition counters (energy.Read); nil records
+	// no app energy.
+	ReadEnergy func(named func(coalition uint64) bool) ([]energy.Reading, error)
 
 	lastHealthDay string // local date of the last health row this process wrote
+	tracker       energy.Tracker
+	energyFailing bool // an energy failure was logged and has not cleared
 }
 
 // Tick reads the battery and writes one sample. The first successful tick of
@@ -45,7 +52,9 @@ func (r *Recorder) Tick(ctx context.Context) error {
 	now := r.Now()
 	day := now.Format("2006-01-02")
 	withHealth := day != r.lastHealthDay
-	if err := r.DB.WriteTick(ctx, TickFrom(s, now, withHealth)); err != nil {
+	t := TickFrom(s, now, withHealth)
+	t.Energy = r.energy(now)
+	if err := r.DB.WriteTick(ctx, t); err != nil {
 		return err
 	}
 	if withHealth {
@@ -53,6 +62,37 @@ func (r *Recorder) Tick(ctx context.Context) error {
 		r.rollup(ctx, now)
 	}
 	return nil
+}
+
+// energy reads the counters and returns each app's energy since the last
+// read. A failure is logged once while it lasts and never fails the tick:
+// the sample is written without energy, and the next good read covers the
+// gap because the tracker's baseline did not move.
+func (r *Recorder) energy(now time.Time) []store.EnergyDelta {
+	if r.ReadEnergy == nil {
+		return nil
+	}
+	if r.tracker.Logf == nil {
+		r.tracker.Logf = r.Log.Printf
+	}
+	rs, err := r.ReadEnergy(r.tracker.Named)
+	var ds []energy.Delta
+	if err == nil {
+		ds, err = r.tracker.Update(now, rs)
+	}
+	if err != nil {
+		if !r.energyFailing {
+			r.Log.Printf("app energy skipped: %v", err)
+		}
+		r.energyFailing = true
+		return nil
+	}
+	r.energyFailing = false
+	out := make([]store.EnergyDelta, len(ds))
+	for i, d := range ds {
+		out[i] = store.EnergyDelta{App: d.App, System: d.System, CPU: d.CPU, GPU: d.GPU, ANE: d.ANE}
+	}
+	return out
 }
 
 // rollup logs what it did; a failure never fails the tick.
