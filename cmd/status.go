@@ -59,7 +59,7 @@ func runStatus(ctx context.Context, out, errw io.Writer, asJSON bool) error {
 				fmt.Fprintf(errw, "warning: reading samples: %v\n", err)
 				samples = nil
 			}
-			if energy, err = db.EnergySince(ctx, since); err != nil {
+			if energy, err = db.EnergySince(ctx, status.EnergyFrom(t)); err != nil {
 				fmt.Fprintf(errw, "warning: reading app energy: %v\n", err)
 				energy = nil
 			}

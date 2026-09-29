@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"math"
 	"net/url"
 	"os"
 	"sort"
@@ -36,11 +37,26 @@ type Sample struct {
 	Watts    float64
 }
 
-// AppEnergy is one row of the app_energy table.
+// BucketSec is the width of an app_energy bucket. Every UTC offset in use is
+// a multiple of 15 minutes, so buckets also start on local quarter hours.
+const BucketSec = 900
+
+// Bucket is the start of the bucket that holds ts.
+func Bucket(ts int64) int64 { return ts - ((ts%BucketSec)+BucketSec)%BucketSec }
+
+// AppEnergy is one app's energy in one bucket.
 type AppEnergy struct {
-	TS     int64
+	TS     int64 // bucket start
 	App    string
-	Energy float64
+	System bool
+	Energy float64 // joules: CPU + GPU + Neural Engine
+}
+
+// EnergyDelta is the energy one app used since the previous tick.
+type EnergyDelta struct {
+	App           string
+	System        bool
+	CPU, GPU, ANE uint64 // nanojoules
 }
 
 // Exists reports whether a database file is present. Read commands use it
@@ -159,10 +175,16 @@ func (d *DB) SamplesSince(ctx context.Context, since int64) ([]Sample, error) {
 	return out, rows.Err()
 }
 
-// EnergySince returns app_energy rows with ts >= since, ordered by ts then app.
+// EnergySince returns the buckets with start >= since, ordered by ts then
+// app. A database from before the apps table has none.
 func (d *DB) EnergySince(ctx context.Context, since int64) ([]AppEnergy, error) {
+	if ok, err := d.hasTable(ctx, "apps"); !ok {
+		return nil, err
+	}
 	rows, err := d.sql.QueryContext(ctx,
-		`SELECT ts, app, energy FROM app_energy WHERE ts >= ? ORDER BY ts, app`, since)
+		`SELECT e.ts, a.name, a.is_system, (e.cpu_nj + e.gpu_nj + e.ane_nj) / 1e9
+		 FROM app_energy e JOIN apps a ON a.id = e.app_id
+		 WHERE e.ts >= ? ORDER BY e.ts, a.name`, since)
 	if err != nil {
 		return nil, err
 	}
@@ -170,12 +192,20 @@ func (d *DB) EnergySince(ctx context.Context, since int64) ([]AppEnergy, error) 
 	var out []AppEnergy
 	for rows.Next() {
 		var e AppEnergy
-		if err := rows.Scan(&e.TS, &e.App, &e.Energy); err != nil {
+		if err := rows.Scan(&e.TS, &e.App, &e.System, &e.Energy); err != nil {
 			return nil, err
 		}
 		out = append(out, e)
 	}
 	return out, rows.Err()
+}
+
+// hasTable reports whether a table exists. Readers do not migrate: the
+// recorder upgrades the file on its next start.
+func (d *DB) hasTable(ctx context.Context, name string) (bool, error) {
+	var n int
+	err := d.sql.QueryRowContext(ctx, `SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = ?`, name).Scan(&n)
+	return n > 0, err
 }
 
 // HealthRow is the part of a daily health row that the trend needs.
@@ -217,7 +247,8 @@ type Tick struct {
 	Watts     *float64
 	RawCurMAh *int
 	RawMaxMAh *int
-	Health    *HealthDay // set on the first tick of a calendar day
+	Health    *HealthDay    // set on the first tick of a calendar day
+	Energy    []EnergyDelta // added to the bucket that holds TS
 }
 
 // HealthDay is one row of the health table.
@@ -231,8 +262,8 @@ type HealthDay struct {
 	Condition  *string
 }
 
-// WriteTick stores a sample, the optional health row and meta.last_tick in
-// one transaction. A second sample in the same second is ignored; a second
+// WriteTick stores a sample, the optional health row, the tick's app energy
+// and meta.last_tick in one transaction. A second sample in the same second is ignored; a second
 // health row on the same day updates the first, keeping known values where
 // the new read has none.
 func (d *DB) WriteTick(ctx context.Context, t Tick) error {
@@ -263,12 +294,60 @@ func (d *DB) WriteTick(ctx context.Context, t Tick) error {
 			return fmt.Errorf("write health: %w", err)
 		}
 	}
+	if err := addEnergy(ctx, tx, Bucket(t.TS), t.Energy); err != nil {
+		return err
+	}
 	if _, err := tx.ExecContext(ctx,
 		`INSERT INTO meta(key, value) VALUES('last_tick', ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value`,
 		strconv.FormatInt(t.TS, 10)); err != nil {
 		return fmt.Errorf("write last_tick: %w", err)
 	}
 	return tx.Commit()
+}
+
+// AddEnergy adds deltas to the bucket that holds ts, in one transaction.
+func (d *DB) AddEnergy(ctx context.Context, ts int64, ds []EnergyDelta) error {
+	tx, err := d.sql.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if err := addEnergy(ctx, tx, Bucket(ts), ds); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+// addEnergy upserts each app by name and adds its delta to the bucket. The
+// newest is_system wins: classification can only get better as more of an
+// app's processes are seen.
+func addEnergy(ctx context.Context, tx *sql.Tx, bucket int64, ds []EnergyDelta) error {
+	for _, e := range ds {
+		var id int64
+		if err := tx.QueryRowContext(ctx,
+			`INSERT INTO apps(name, is_system) VALUES(?, ?)
+			 ON CONFLICT(name) DO UPDATE SET is_system = excluded.is_system
+			 RETURNING id`, e.App, e.System).Scan(&id); err != nil {
+			return fmt.Errorf("write app %q: %w", e.App, err)
+		}
+		if _, err := tx.ExecContext(ctx,
+			`INSERT INTO app_energy(ts, app_id, cpu_nj, gpu_nj, ane_nj) VALUES(?,?,?,?,?)
+			 ON CONFLICT(ts, app_id) DO UPDATE SET cpu_nj = cpu_nj + excluded.cpu_nj,
+			   gpu_nj = gpu_nj + excluded.gpu_nj, ane_nj = ane_nj + excluded.ane_nj`,
+			bucket, id, nj(e.CPU), nj(e.GPU), nj(e.ANE)); err != nil {
+			return fmt.Errorf("write app energy %q: %w", e.App, err)
+		}
+	}
+	return nil
+}
+
+// nj stores a delta as SQLite's signed integer. One tick never comes near
+// 2^63 nJ (292 years at 1 kW); the tracker rejects implausible deltas first.
+func nj(v uint64) int64 {
+	if v > math.MaxInt64 {
+		return math.MaxInt64
+	}
+	return int64(v)
 }
 
 // Meta reads one key from the meta table.
@@ -299,9 +378,7 @@ func (d *DB) RecordRunStart(ctx context.Context, ts int64) error {
 // RunStartsBetween returns recorder starts with from <= started <= to, oldest
 // first. A database from before the runs table has none.
 func (d *DB) RunStartsBetween(ctx context.Context, from, to int64) ([]int64, error) {
-	// Readers do not migrate: the recorder upgrades the file on its next start.
-	var n int
-	if err := d.sql.QueryRowContext(ctx, `SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'runs'`).Scan(&n); err != nil || n == 0 {
+	if ok, err := d.hasTable(ctx, "runs"); !ok {
 		return nil, err
 	}
 	rows, err := d.sql.QueryContext(ctx, `SELECT started FROM runs WHERE started BETWEEN ? AND ? ORDER BY started`, from, to)
@@ -378,10 +455,13 @@ func (d *DB) OldestRawTS(ctx context.Context) (int64, error) {
 	return ts, err
 }
 
-// EnergySums adds up each app's energy over from <= ts < to.
+// EnergySums adds up each app's energy, in joules, over the buckets with
+// from <= ts < to.
 func (d *DB) EnergySums(ctx context.Context, from, to int64) (map[string]float64, error) {
 	rows, err := d.sql.QueryContext(ctx,
-		`SELECT app, SUM(energy) FROM app_energy WHERE ts >= ? AND ts < ? GROUP BY app`, from, to)
+		`SELECT a.name, SUM(e.cpu_nj + e.gpu_nj + e.ane_nj) / 1e9
+		 FROM app_energy e JOIN apps a ON a.id = e.app_id
+		 WHERE e.ts >= ? AND e.ts < ? GROUP BY a.name`, from, to)
 	if err != nil {
 		return nil, err
 	}

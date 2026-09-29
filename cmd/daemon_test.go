@@ -168,7 +168,7 @@ func TestInstallWritesPlistDatabaseAndBootstraps(t *testing.T) {
 	}
 	v, _, _ := db.Meta(context.Background(), "schema_version")
 	db.Close()
-	if v != "2" {
+	if v != "3" {
 		t.Errorf("schema_version = %q", v)
 	}
 	if _, err := os.Stat(filepath.Dir(e.log)); err != nil {

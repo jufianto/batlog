@@ -25,7 +25,14 @@ const (
 	over12h = 12 * 60
 )
 
-// Offender is the app with the highest energy in the window.
+// EnergyFrom is the start of the buckets the worst offender is picked from:
+// the current one and the one before, so a bucket that has just begun never
+// decides alone.
+func EnergyFrom(now time.Time) int64 {
+	return store.Bucket(now.Unix()) - store.BucketSec
+}
+
+// Offender is the non-system app with the most energy in the window.
 type Offender struct {
 	App   string
 	Share float64 // 0..1 of the window's total energy
@@ -139,7 +146,9 @@ func slopePerHour(samples []store.Sample) float64 {
 	return sxy / sxx
 }
 
-// worst sums energy per app and returns the largest as a share of the total.
+// worst sums energy per app and returns the largest non-system app as a
+// share of all apps' energy, system ones included: WindowServer's drain is
+// real, but quitting it is not advice (F4).
 func worst(energy []store.AppEnergy) *Offender {
 	if len(energy) == 0 {
 		return nil
@@ -147,7 +156,9 @@ func worst(energy []store.AppEnergy) *Offender {
 	sums := map[string]float64{}
 	var total float64
 	for _, e := range energy {
-		sums[e.App] += e.Energy
+		if !e.System {
+			sums[e.App] += e.Energy
+		}
 		total += e.Energy
 	}
 	if total <= 0 {

@@ -107,7 +107,8 @@ func TestRisingPercentOnBatteryIsOmitted(t *testing.T) {
 
 func TestOnACHasNoDrainButKeepsWorst(t *testing.T) {
 	onAC := battery.Snapshot{Percent: 82, OnAC: true, Charging: true, Watts: 41.8, HasWatts: true, MacOSMinutes: 14, HasMacOSMinutes: true}
-	energy := []store.AppEnergy{{TS: now.Unix() - 60, App: "Google Chrome", Energy: 30}, {TS: now.Unix(), App: "Code", Energy: 20}, {TS: now.Unix(), App: "Google Chrome", Energy: 8}}
+	energy := []store.AppEnergy{{TS: now.Unix() - 900, App: "Google Chrome", Energy: 30}, {TS: now.Unix(), App: "Code", Energy: 20},
+		{TS: now.Unix(), App: "Google Chrome", Energy: 8}, {TS: now.Unix(), App: "WindowServer", System: true, Energy: 42}}
 	r := Build(onAC, samples([]int{80, 81, 82, 82}, true), energy, now)
 	if r.Drain != nil || r.EstMinutes != nil || r.Collecting {
 		t.Errorf("no drain on AC: %+v", r)
@@ -115,8 +116,8 @@ func TestOnACHasNoDrainButKeepsWorst(t *testing.T) {
 	if r.MacOSMinutes != nil {
 		t.Errorf("macOS time-to-full is not a time-left estimate; want nil on AC")
 	}
-	if r.Worst == nil || r.Worst.App != "Google Chrome" || math.Abs(r.Worst.Share-38.0/58.0) > 1e-9 {
-		t.Errorf("Worst = %+v, want Google Chrome at 38/58", r.Worst)
+	if r.Worst == nil || r.Worst.App != "Google Chrome" || math.Abs(r.Worst.Share-38.0/100.0) > 1e-9 {
+		t.Errorf("Worst = %+v, want Google Chrome at 38/100 (WindowServer is system: counted, never named)", r.Worst)
 	}
 }
 
