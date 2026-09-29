@@ -87,8 +87,7 @@ batlog top --session 0926-1656 # which apps drained it, and its heaviest 30 minu
   (CPU, GPU, Neural Engine, in nanojoules). This is the grouping Activity
   Monitor uses, and it includes processes that have already exited. batlog
   reads them with plain syscalls: no sudo, no `powermetrics`, and it costs
-  about 0.004 % of the energy it measures. See
-  [ADR-0006](./docs/adr/0006-app-energy-from-kernel-coalition-counters.md).
+  about 0.004 % of the energy it measures.
 - **Storage:** SQLite in `~/Library/Application Support/batlog/`:
   - one battery sample a minute;
   - app energy in 15-minute buckets;
@@ -118,17 +117,11 @@ batlog top --session 0926-1656 # which apps drained it, and its heaviest 30 minu
 Contributions are welcome: bug reports, battery captures from Mac models we
 have not tested, docs and code. [CONTRIBUTING.md](./CONTRIBUTING.md) explains:
 - how to build and test;
-- how the docs (PRDs, ADRs, specs) work;
+- how the design docs work;
 - which contributions help most right now.
 
 Please report security problems privately, as [SECURITY.md](./SECURITY.md)
 describes.
-
-## Contributors
-
-Thanks to everyone who has contributed code, captures or bug reports.
-
-[![Contributors](https://contrib.rocks/image?repo=jufianto/batlog)](https://github.com/jufianto/batlog/graphs/contributors)
 
 ## Licence
 
