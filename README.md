@@ -20,10 +20,9 @@ app energy from about 21:45 only, when recording started; battery cost covers th
 heaviest 30 min: 21:20 → 21:50 · 20.0 W average
 ```
 
-> **Status: early, and in daily use.** `status`, `health`, `history`, `top`
-> and the background recorder work. `report` and `export` are next (see
-> [docs/README.md](./docs/README.md)). There is no release yet; install from
-> source below.
+> **Status: early (v0.1, pre-release), and in daily use.** `status`, `health`,
+> `history`, `top` and the background recorder work. `report` and `export`
+> are next.
 
 ## Why another battery tool
 
@@ -33,11 +32,22 @@ answers "what drained *that* charge?". That is what batlog is for.
 
 ## Install
 
-You need Go 1.27 or newer (`brew install go`).
+**Download a release.** Get the archive for your Mac from
+[Releases](https://github.com/jufianto/batlog/releases): `darwin_arm64` for
+Apple Silicon, `darwin_amd64` for Intel. Then:
+
+```sh
+tar -xzf batlog_*_darwin_*.tar.gz
+xattr -d com.apple.quarantine batlog   # the binary is not notarized yet
+mv batlog /usr/local/bin/              # or anywhere on your PATH
+batlog daemon install                  # start recording, now and at every login
+```
+
+**Or with Go** 1.27 or newer (`brew install go`):
 
 ```sh
 go install github.com/jufianto/batlog@latest   # installs to ~/go/bin/batlog
-batlog daemon install                          # start recording, now and at every login
+batlog daemon install
 ```
 
 Or build from a clone: `CGO_ENABLED=0 go build .`
