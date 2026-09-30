@@ -36,14 +36,19 @@ No other flags. Must answer in under 1 s.
 
 Human, on battery with daemon running:
 ```
-🔋 67%  ·  on battery  ·  discharging  ·  8.4 W
+🔋 67%  ·  on battery  ·  using 8.4 W
 drain       11.8 %/hr   (last 10 min)
 est. left   5h 40m  (batlog) · 5h 12m (macOS)
 worst now   Google Chrome  (38% of energy)
 ```
 
-Human, on AC: `⚡ 82% · AC · charging · 41.8 W`, no drain or estimate lines,
+Human, on AC: `⚡ 82% · AC · charging at 41.8 W`, no drain or estimate lines,
 worst offender kept.
+
+The watts are the power through the battery, without its direction: what
+the Mac uses on battery, or what goes into the battery while charging. On
+AC but not charging they are neither, so the human line leaves them out
+(`⚡ 100% · AC · charged`); JSON `watts` keeps the reading.
 
 JSON (stable):
 ```json
