@@ -38,6 +38,11 @@ batlog daemon install | uninstall | status | logs [-f] | run [--once]
    roll up and prune raw rows older than 90 days.
 4. Update `meta.last_tick`. Per-probe timeout 10 s. On any probe or write
    error: log it, skip the tick, continue. Never exit on a data error.
+5. Under launchd, before each tick but the first: if the file at the
+   binary's path is not the one the recorder started from (`brew upgrade`
+   repointed the link, `go install` renamed a new file over it), log it and
+   exit 0. `KeepAlive` starts the new binary, so an upgrade needs no
+   reinstall. A missing path (an uninstall) is not a replacement.
 
 **status:** installed? (plist exists) · loaded? (`launchctl print`) · alive?
 (`last_tick` age: healthy < 2 min, stale 2–10 min, dead > 10 min; no tick

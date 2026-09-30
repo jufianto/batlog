@@ -755,3 +755,52 @@ func TestRunOnceRecordsAStart(t *testing.T) {
 		t.Errorf("run starts = %v, want [%d]", starts, testNow.Unix())
 	}
 }
+
+func TestBinaryReplaced(t *testing.T) {
+	stubDaemon(t) // restores executable
+	dir := t.TempDir()
+	v1 := filepath.Join(dir, "Caskroom", "0.1.0", "batlog")
+	v2 := filepath.Join(dir, "Caskroom", "0.1.1", "batlog")
+	link := filepath.Join(dir, "bin", "batlog")
+	for _, p := range []string{v1, v2} {
+		os.MkdirAll(filepath.Dir(p), 0o755)
+		os.WriteFile(p, []byte("#!"), 0o755)
+	}
+	os.MkdirAll(filepath.Dir(link), 0o755)
+	if err := os.Symlink(v1, link); err != nil {
+		t.Fatal(err)
+	}
+	executable = func() (string, error) { return link, nil }
+	replaced := binaryReplaced()
+	if replaced == nil || replaced() {
+		t.Fatal("an unchanged binary is not replaced")
+	}
+
+	// brew upgrade: the old version is deleted, the link repointed.
+	os.Remove(link)
+	if replaced() {
+		t.Error("a missing binary is not a replacement: launchd would have nothing to start")
+	}
+	os.Symlink(v2, link)
+	if !replaced() {
+		t.Error("a repointed link is a replacement")
+	}
+
+	// go install renames a new file over the old path.
+	plain := filepath.Join(dir, "gobin", "batlog")
+	os.MkdirAll(filepath.Dir(plain), 0o755)
+	os.WriteFile(plain, []byte("#!"), 0o755)
+	executable = func() (string, error) { return plain, nil }
+	replaced = binaryReplaced()
+	tmp := plain + ".tmp"
+	os.WriteFile(tmp, []byte("#!v2"), 0o755)
+	os.Rename(tmp, plain)
+	if !replaced() {
+		t.Error("a file renamed over the path is a replacement")
+	}
+
+	executable = func() (string, error) { return filepath.Join(dir, "nope"), nil }
+	if binaryReplaced() != nil {
+		t.Error("no check without a binary")
+	}
+}

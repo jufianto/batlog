@@ -79,27 +79,21 @@ homebrew_casks:
     caveats: |
       Start recording (a per-user LaunchAgent, no sudo):
         batlog daemon install
-      A recorder that was already installed is switched to this version automatically.
+      A recorder that was already installed switches to this version within a minute.
       Before `brew uninstall batlog`, run `batlog daemon uninstall` (your data is kept),
       or use `brew uninstall --zap batlog` to remove the recorder and all its data.
-    hooks:
-      pre:
-        # Not notarized yet: clear the quarantine bit before anything runs the
-        # binary. Completions are generated before postflight, and a
-        # quarantined binary is killed by Gatekeeper.
-        install: |
-          if OS.mac?
-            system_command "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "#{staged_path}/batlog"]
-          end
-      post:
-        install: |
-          if OS.mac?
-            # A recorder already installed (an upgrade, or a switch from another
-            # install) is re-registered on the linked binary, so it runs this version.
-            if File.exist?(File.expand_path("~/Library/LaunchAgents/dev.jufi.batlog.plist"))
-              system_command "#{HOMEBREW_PREFIX}/bin/batlog", args: ["daemon", "install"], print_stdout: true
-            end
-          end
+    # Homebrew 7 deprecates Ruby preflight/postflight hooks, which GoReleaser's
+    # `hooks` write, in favour of declarative steps. The recorder needs no
+    # postflight: it restarts itself when `brew upgrade` replaces the binary.
+    custom_block: |
+      # Not notarized yet: clear the quarantine bit before anything runs the
+      # binary, as generating completions does. A quarantined binary is killed
+      # by Gatekeeper.
+      preflight_steps do
+        on_macos do
+          run "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "{{ "{{staged_path}}" }}/batlog"]
+        end
+      end
     zap:
       launchctl:
         - dev.jufi.batlog

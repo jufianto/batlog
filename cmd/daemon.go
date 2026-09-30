@@ -434,6 +434,9 @@ func runRecorder(ctx context.Context, out io.Writer, once bool) error {
 	}
 
 	rec := &recorder.Recorder{DB: db, Read: readBattery, Now: now, Log: logger, ReadEnergy: readEnergy}
+	if underLaunchd {
+		rec.Replaced = binaryReplaced() // a recorder run by hand is not restarted
+	}
 	if once {
 		if err := rec.Start(ctx); err != nil {
 			return err
@@ -448,6 +451,29 @@ func runRecorder(ctx context.Context, out io.Writer, once bool) error {
 	err = rec.Run(ctx, tickEvery)
 	logger.Printf("batlog daemon stopped")
 	return err
+}
+
+// binaryReplaced returns a check for the batlog binary at this process's
+// path being replaced: `brew upgrade` repoints the symlink launchd runs, and
+// `go install` renames a new file over it. A path that is missing or not
+// executable (an uninstall) is not a replacement: exiting then would leave
+// launchd nothing to start. Nil when the binary cannot be found.
+func binaryReplaced() func() bool {
+	bin, err := executable()
+	if err != nil {
+		return nil
+	}
+	start, err := os.Stat(bin)
+	if err != nil {
+		return nil
+	}
+	return func() bool {
+		cur, err := os.Stat(bin)
+		if err != nil || !cur.Mode().IsRegular() || cur.Mode()&0o111 == 0 {
+			return false
+		}
+		return !os.SameFile(start, cur) || !cur.ModTime().Equal(start.ModTime()) || cur.Size() != start.Size()
+	}
 }
 
 func runLogs(ctx context.Context, out io.Writer, follow bool) error {

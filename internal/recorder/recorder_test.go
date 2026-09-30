@@ -381,3 +381,26 @@ func TestTickWithoutEnergyProbe(t *testing.T) {
 		t.Errorf("energy = %+v", got)
 	}
 }
+
+func TestRunExitsWhenTheBinaryIsReplaced(t *testing.T) {
+	e := newEnv(t)
+	asks := 0
+	e.rec.Replaced = func() bool { asks++; return asks == 2 }
+	done := make(chan error, 1)
+	go func() { done <- e.rec.Run(context.Background(), 5*time.Millisecond) }()
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Errorf("Run returned %v, want nil so launchd restarts it", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("Run did not exit after the binary was replaced")
+	}
+	// The first tick is never held back; the first ask said no, the second yes.
+	if n, _, _ := e.db.SampleStats(context.Background()); n != 2 {
+		t.Errorf("samples = %d, want 2", n)
+	}
+	if !strings.Contains(e.logs.String(), "binary was replaced") {
+		t.Errorf("log = %q", e.logs.String())
+	}
+}

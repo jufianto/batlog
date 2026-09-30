@@ -33,6 +33,9 @@ type Recorder struct {
 	// ReadEnergy reads the coalition counters (energy.Read); nil records
 	// no app energy.
 	ReadEnergy func(named func(coalition uint64) bool) ([]energy.Reading, error)
+	// Replaced, if set, is asked before every tick but the first. True
+	// makes Run return, so launchd's KeepAlive starts the new binary.
+	Replaced func() bool
 
 	lastHealthDay string // local date of the last health row this process wrote
 	tracker       energy.Tracker
@@ -123,8 +126,8 @@ func (r *Recorder) Start(ctx context.Context) error {
 }
 
 // Run records its start, then ticks now and every interval until ctx is
-// cancelled. A failed tick is logged and skipped; the loop never exits on a
-// data error.
+// cancelled or Replaced says so. A failed tick is logged and skipped; the
+// loop never exits on a data error.
 func (r *Recorder) Run(ctx context.Context, every time.Duration) error {
 	if err := r.Start(ctx); err != nil && ctx.Err() == nil {
 		r.Log.Printf("could not record start: %v", err)
@@ -142,6 +145,10 @@ func (r *Recorder) Run(ctx context.Context, every time.Duration) error {
 		case <-ctx.Done():
 			return nil
 		case <-t.C:
+			if r.Replaced != nil && r.Replaced() {
+				r.Log.Printf("batlog binary was replaced; exiting so launchd starts the new one")
+				return nil
+			}
 			tick()
 		}
 	}
