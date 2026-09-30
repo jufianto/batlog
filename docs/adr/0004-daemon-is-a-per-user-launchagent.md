@@ -31,6 +31,8 @@ its rows are always labelled as such.
 + The database is the single source of truth; every other command is a read.
 - If the binary moves (Homebrew upgrade), the plist points nowhere. `install`
   is idempotent so re-running it fixes this, and `daemon status` reports
-  "loaded but not running" with that hint.
+  "loaded but not running" with that hint. The plist names the stable
+  symlink, and a recorder whose binary is replaced there restarts itself
+  (F5), so a `brew upgrade` needs neither.
 - History starts on install day. Every day the daemon is not running is data
   we never get, which is why the daemon is built third, not last.
