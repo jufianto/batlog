@@ -32,7 +32,14 @@ answers "what drained *that* charge?". That is what batlog is for.
 
 ## Install
 
-**Download a release.** Get the archive for your Mac from
+**With Homebrew:**
+
+```sh
+brew install jufianto/tools/batlog
+batlog daemon install     # start recording, now and at every login
+```
+
+**Or download a release.** Get the archive for your Mac from
 [Releases](https://github.com/jufianto/batlog/releases): `darwin_arm64` for
 Apple Silicon, `darwin_amd64` for Intel. Then:
 
