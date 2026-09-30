@@ -55,3 +55,55 @@ release:
   # 0.x releases are pre-releases until the v1 feature set (F1–F7) is done.
   prerelease: "true"
   name_template: "v{{ .Version }}"
+
+# Homebrew: `brew install jufianto/tools/batlog` from github.com/jufianto/homebrew-tools.
+# GoReleaser commits Casks/batlog.rb there on every release (GITHUB_TOKEN must
+# be able to push to that repo; `gh auth token` with repo scope can).
+homebrew_casks:
+  - name: batlog
+    repository:
+      owner: jufianto
+      name: homebrew-tools
+      branch: master
+    directory: Casks
+    homepage: https://github.com/jufianto/batlog
+    description: Record battery and per-app energy, and find out what drained it
+    license: MIT
+    commit_author:
+      name: Jufianto Henri
+      email: jufiantohendri@gmail.com
+    commit_msg_template: "batlog {{ .Tag }}"
+    generate_completions_from_executable:
+      shell_parameter_format: cobra # runs `batlog completion <shell>`
+      shells: [bash, zsh, fish]
+    caveats: |
+      Start recording (a per-user LaunchAgent, no sudo):
+        batlog daemon install
+      A recorder that was already installed is switched to this version automatically.
+      Before `brew uninstall batlog`, run `batlog daemon uninstall` (your data is kept),
+      or use `brew uninstall --zap batlog` to remove the recorder and all its data.
+    hooks:
+      pre:
+        # Not notarized yet: clear the quarantine bit before anything runs the
+        # binary. Completions are generated before postflight, and a
+        # quarantined binary is killed by Gatekeeper.
+        install: |
+          if OS.mac?
+            system_command "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "#{staged_path}/batlog"]
+          end
+      post:
+        install: |
+          if OS.mac?
+            # A recorder already installed (an upgrade, or a switch from another
+            # install) is re-registered on the linked binary, so it runs this version.
+            if File.exist?(File.expand_path("~/Library/LaunchAgents/dev.jufi.batlog.plist"))
+              system_command "#{HOMEBREW_PREFIX}/bin/batlog", args: ["daemon", "install"], print_stdout: true
+            end
+          end
+    zap:
+      launchctl:
+        - dev.jufi.batlog
+      trash:
+        - ~/Library/LaunchAgents/dev.jufi.batlog.plist
+        - ~/Library/Logs/batlog
+        - ~/Library/Application Support/batlog

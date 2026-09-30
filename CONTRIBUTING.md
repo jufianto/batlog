@@ -80,3 +80,8 @@ GITHUB_TOKEN=$(gh auth token) goreleaser release --clean --release-notes notes.m
 
 `goreleaser release --snapshot --clean` builds everything into `dist/`
 without publishing.
+
+The release also commits `Casks/batlog.rb` to
+[jufianto/homebrew-tools](https://github.com/jufianto/homebrew-tools), so
+`brew upgrade batlog` picks it up. Check the rendered cask in
+`dist/homebrew/Casks/` before a real release.
