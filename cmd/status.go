@@ -125,10 +125,18 @@ func renderStatus(w io.Writer, r status.Report, dbBroken bool) {
 			state = "not charging"
 		}
 	}
-	line := fmt.Sprintf("%s %d%%  ·  %s  ·  %s", icon, r.Percent, source, state)
+	// Watts is the power through the battery, without its direction: what
+	// the Mac uses on battery, what goes into the battery while charging.
+	// On AC but not charging it is neither, so it is left out.
 	if r.Watts != nil {
-		line += fmt.Sprintf("  ·  %.1f W", *r.Watts)
+		switch {
+		case !r.OnAC:
+			state = fmt.Sprintf("using %.1f W", *r.Watts)
+		case r.Charging:
+			state = fmt.Sprintf("charging at %.1f W", *r.Watts)
+		}
 	}
+	line := fmt.Sprintf("%s %d%%  ·  %s  ·  %s", icon, r.Percent, source, state)
 	fmt.Fprintln(w, line)
 
 	if !r.OnAC {

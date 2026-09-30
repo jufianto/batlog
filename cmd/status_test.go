@@ -130,7 +130,7 @@ func TestStatusHumanOnACAndTip(t *testing.T) {
 		t.Fatal(err)
 	}
 	s := out.String()
-	if !strings.HasPrefix(s, "⚡ 82%  ·  AC  ·  charging  ·  41.8 W\n") {
+	if !strings.HasPrefix(s, "⚡ 82%  ·  AC  ·  charging at 41.8 W\n") {
 		t.Errorf("first line: %q", s)
 	}
 	// "drain" alone would also match the tip line; check the value lines.
@@ -142,13 +142,24 @@ func TestStatusHumanOnACAndTip(t *testing.T) {
 	}
 }
 
+func TestStatusHumanOnACNotChargingHasNoWatts(t *testing.T) {
+	stubStatus(t, battery.Snapshot{Percent: 100, OnAC: true, FullyCharged: true, Watts: 0.4, HasWatts: true}, filepath.Join(t.TempDir(), "missing.db"))
+	var out, errw bytes.Buffer
+	if err := runStatus(context.Background(), &out, &errw, false); err != nil {
+		t.Fatal(err)
+	}
+	if s := out.String(); !strings.HasPrefix(s, "⚡ 100%  ·  AC  ·  charged\n") {
+		t.Errorf("first line: %q", s)
+	}
+}
+
 func TestStatusHumanOnBatteryWithData(t *testing.T) {
 	stubStatus(t, battery.Snapshot{Percent: 67, Watts: 8.4, HasWatts: true, MacOSMinutes: 312, HasMacOSMinutes: true}, seededDB(t))
 	var out, errw bytes.Buffer
 	if err := runStatus(context.Background(), &out, &errw, false); err != nil {
 		t.Fatal(err)
 	}
-	want := "🔋 67%  ·  on battery  ·  discharging  ·  8.4 W\n" +
+	want := "🔋 67%  ·  on battery  ·  using 8.4 W\n" +
 		"drain       29.1 %/hr   (last 10 min)\n" +
 		"est. left   2h 18m  (batlog) · 5h 12m (macOS)\n" +
 		"worst now   Google Chrome  (66% of energy)\n"
