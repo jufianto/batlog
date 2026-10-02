@@ -106,31 +106,35 @@ func TestTrendLinearDecline(t *testing.T) {
 }
 
 func TestTrendMatchesManualLeastSquares(t *testing.T) {
-	// x = 0, 10, 20 days; y = 90.0, 89.0, 89.5 %. Mean x 10, mean y 89.5;
-	// Σ(dx·dy) = -5, Σdx² = 200 → -0.025 %/day → -0.75 %/month.
-	tr, _ := Trend(rows(1000, "2026-07-01", 900, "2026-07-11", 890, "2026-07-21", 895))
-	if tr == nil || tr.PctPerMonth != -0.75 {
-		t.Errorf("trend = %+v, want -0.75 %%/month", tr)
+	// x = 0, 15, 30 days; y = 90.0, 89.0, 89.5 %. Mean x 15, mean y 89.5;
+	// Σ(dx·dy) = -7.5, Σdx² = 450 → -1/60 %/day → -0.5 %/month.
+	tr, _ := Trend(rows(1000, "2026-07-01", 900, "2026-07-16", 890, "2026-07-31", 895))
+	if tr == nil || tr.PctPerMonth != -0.5 {
+		t.Errorf("trend = %+v, want -0.5 %%/month", tr)
 	}
 }
 
-func TestTrendNeedsTwoRowsSevenDaysApart(t *testing.T) {
+func TestTrendNeedsTwoRowsThirtyDaysApart(t *testing.T) {
 	if tr, span := Trend(nil); tr != nil || span != 0 {
 		t.Errorf("no rows: %v %d", tr, span)
 	}
 	if tr, span := Trend(rows(1000, "2026-07-01", 900)); tr != nil || span != 0 {
 		t.Errorf("one row: %v %d", tr, span)
 	}
-	if tr, span := Trend(rows(1000, "2026-07-01", 900, "2026-07-07", 899)); tr != nil || span != 6 {
-		t.Errorf("6-day span: %v %d, want nil 6", tr, span)
+	// Seen live: 85.4 % → 90.4 % in a week, a recalibration, not +19 %/month.
+	if tr, span := Trend(rows(6249, "2026-09-26", 5339, "2026-10-03", 5652)); tr != nil || span != 7 {
+		t.Errorf("7-day span: %v %d, want nil 7", tr, span)
 	}
-	if tr, span := Trend(rows(1000, "2026-07-01", 900, "2026-07-08", 899)); tr == nil || span != 7 {
-		t.Errorf("7-day span: %v %d, want a trend", tr, span)
+	if tr, span := Trend(rows(1000, "2026-07-01", 900, "2026-07-30", 899)); tr != nil || span != 29 {
+		t.Errorf("29-day span: %v %d, want nil 29", tr, span)
+	}
+	if tr, span := Trend(rows(1000, "2026-07-01", 900, "2026-07-31", 899)); tr == nil || span != 30 {
+		t.Errorf("30-day span: %v %d, want a trend", tr, span)
 	}
 }
 
 func TestTrendFlatIsZeroNotNegativeZero(t *testing.T) {
-	tr, _ := Trend(rows(1000, "2026-07-01", 900, "2026-07-20", 900))
+	tr, _ := Trend(rows(1000, "2026-07-01", 900, "2026-07-31", 900))
 	if tr == nil || tr.PctPerMonth != 0 || math.Signbit(tr.PctPerMonth) {
 		t.Errorf("flat trend = %+v, want +0", tr)
 	}

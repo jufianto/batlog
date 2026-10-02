@@ -31,7 +31,7 @@ func seedHealth(t *testing.T, path string, rows ...[2]any) {
 
 func TestReportDailyHuman(t *testing.T) {
 	f := stubTop(t, 719, dayEnergy...)
-	seedHealth(t, f.db, [2]any{"2026-09-10", 4500}, [2]any{"2026-09-25", 4480})
+	seedHealth(t, f.db, [2]any{"2026-08-26", 4500}, [2]any{"2026-09-25", 4480})
 	got, err := run(t, "report")
 	if err != nil {
 		t.Fatal(err)
@@ -56,8 +56,8 @@ func TestReportDailyHuman(t *testing.T) {
 		"charging habits: not enough sessions yet (0)\n" +
 		"above 90% 89% of the time · below 20% 0%\n" +
 		"⚠ battery spends 89% of time above 90% — consider Optimized Charging or unplugging earlier\n" +
-		// 90.0 % → 89.6 % over 15 days.
-		"health 89.6% (−0.80 %/month)\n"
+		// 90.0 % → 89.6 % over 30 days.
+		"health 89.6% (−0.40 %/month)\n"
 	if got != want {
 		t.Errorf("got:\n%s\nwant:\n%s", got, want)
 	}

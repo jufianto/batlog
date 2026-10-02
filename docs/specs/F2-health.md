@@ -24,7 +24,10 @@ batlog health [--trend] [--json]
    stops users thinking batlog is wrong ([ADR-0002](../adr/0002-battery-via-ioreg-plist.md)).
 4. `--trend`: read the `health` table (one row a day, written by the daemon).
    Show raw health % at the start and end of the last 90 days and the slope
-   of a linear fit in %/month. Needs ≥ 2 rows at least 7 days apart.
+   of a linear fit in %/month. Needs ≥ 2 rows at least 30 days apart: the
+   gauge's raw maximum recalibrates by several percent over days (seen live:
+   85.4 % → 90.4 % in a week) while real wear is under 1 %/month, so a
+   shorter fit reports noise as a trend.
 5. Condition: `PermanentFailureStatus` = 0 → `Normal`; anything else → show
    the raw value and the text `Service recommended`, in red.
 
@@ -55,7 +58,7 @@ skipped.
 
 | Case | Behaviour |
 |---|---|
-| `--trend` with < 2 rows or < 7 days span | Print current values + `trend: not enough history yet (have N days, need 7)` |
+| `--trend` with < 2 rows or < 30 days span | Print current values + `trend: not enough history yet (have N days, need 30)` |
 | `NominalChargeCapacity` missing (older Intel) | Omit the *Apple reports* line |
 | `DesignCapacity` or `AppleRawMaxCapacity` missing | Omit health % with a note naming the missing key |
 | Condition ≠ Normal | Render in red; include the raw status value |
