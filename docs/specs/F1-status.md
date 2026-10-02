@@ -43,7 +43,15 @@ worst now   Google Chrome  (38% of energy)
 ```
 
 Human, on AC: `⚡ 82% · AC · charging at 41.8 W`, no drain or estimate lines,
-worst offender kept.
+worst offender kept. While charging below 100 % it adds the time to full:
+
+```
+est. full   37m  (batlog) · 30m (macOS)
+```
+
+batlog's is from this Mac's charge curve (F3), or the default curve before
+the daemon has recorded any charging; macOS's is `AvgTimeToFull` (65535 is
+unknown, and it is only read while charging).
 
 The watts are the power through the battery, without its direction: what
 the Mac uses on battery, or what goes into the battery while charging. On
@@ -61,6 +69,8 @@ JSON (stable):
   "drain_pct_per_hr": 11.8,
   "est_minutes_left": 340,
   "macos_est_minutes": 312,
+  "est_minutes_to_full": null,
+  "macos_minutes_to_full": null,
   "worst_offender": {"app": "Google Chrome", "energy_share": 0.38}
 }
 ```

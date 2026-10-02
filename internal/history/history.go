@@ -71,6 +71,41 @@ type Session struct {
 	Source   string
 }
 
+// ChargeSession is one run on AC, from a plug-in to the unplug. Only batlog
+// samples make them: pmset has no charging detail.
+type ChargeSession struct {
+	// ID is the plug-in in local time as MMDD-HHMM, with b, c, … for a
+	// later one in the same minute, as for battery sessions.
+	ID       string
+	Start    int64 // the plug event
+	End      int64 // the unplug; 0 while ongoing
+	StartPct int
+	EndPct   int // the last sample on AC: at the unplug, or now
+	// FullAt is the first sample at 100 %, 0 if the charge never got
+	// there. Macs charge asleep, so after a sleep gap the battery may have
+	// been full for a while: FullUpperBound says the time to full is at
+	// most FullAt - Start.
+	FullAt         int64
+	FullUpperBound bool
+	// AtFullMin is the time from FullAt to the unplug (or now), sleep on
+	// the charger included: a full battery left plugged in overnight is
+	// the habit it measures.
+	AtFullMin int
+	// HoldMin is the awake time on AC, not charging, below 100 %, before
+	// the battery was first full: macOS holding the charge (Optimized
+	// Charging, a charge limit, heat) or a charger too weak to charge. After
+	// full, macOS lets it drift a few percent before topping up; that is
+	// time at full, not a hold. HoldPct is the percent it held at last.
+	HoldMin, HoldPct int
+	Charging         bool // charging at the newest sample of an ongoing one
+	// Current is true when that newest sample is from the last 90 s: just
+	// after a wake the newest sample can be hours old, and its percent says
+	// nothing about the battery now.
+	Current bool
+	Ongoing bool
+	DataGap bool
+}
+
 // Lasted answers "battery lasted": the ongoing session so far, or the last
 // completed one.
 type Lasted struct {
@@ -87,12 +122,13 @@ type Totals struct {
 
 // Result is the history of one range.
 type Result struct {
-	Events      []Event // inside the range, ascending
-	Sessions    []Session
-	FirstCharge *Event
-	LastUnplug  *Event
-	Lasted      *Lasted
-	Totals      Totals
+	Events         []Event // inside the range, ascending
+	Sessions       []Session
+	ChargeSessions []ChargeSession
+	FirstCharge    *Event
+	LastUnplug     *Event
+	Lasted         *Lasted
+	Totals         Totals
 }
 
 // Build computes the history of in.From..in.To.
@@ -108,7 +144,15 @@ func Build(in Input) Result {
 	r.Events = append(r.Events, events...)
 	r.Sessions = append(r.Sessions, sessions...)
 	r.Totals = totals
+	r.ChargeSessions = charges(in, from, to)
 	assignIDs(r.Sessions, in.From.Location())
+	ids := make([]int64, len(r.ChargeSessions))
+	for i, c := range r.ChargeSessions {
+		ids[i] = c.Start
+	}
+	for i, id := range idsFor(ids, in.From.Location()) {
+		r.ChargeSessions[i].ID = id
+	}
 
 	// Already ascending: pmset events are all before the first sample.
 	for i := range r.Events {
@@ -131,16 +175,30 @@ const idLayout = "0102-1504"
 
 // assignIDs names sessions, which are in start order, by their start minute.
 func assignIDs(ss []Session, loc *time.Location) {
-	seen := map[string]int{}
+	starts := make([]int64, len(ss))
 	for i := range ss {
-		id := time.Unix(ss[i].Start, 0).In(loc).Format(idLayout)
+		starts[i] = ss[i].Start
+	}
+	for i, id := range idsFor(starts, loc) {
+		ss[i].ID = id
+	}
+}
+
+// idsFor names starts, ascending, by their minute: MMDD-HHMM, then b, c, …
+// for later ones in the same minute.
+func idsFor(starts []int64, loc *time.Location) []string {
+	ids := make([]string, len(starts))
+	seen := map[string]int{}
+	for i, s := range starts {
+		id := time.Unix(s, 0).In(loc).Format(idLayout)
 		if n := seen[id]; n > 0 && n < 26 {
-			ss[i].ID = id + string(rune('a'+n))
+			ids[i] = id + string(rune('a'+n))
 		} else {
-			ss[i].ID = id
+			ids[i] = id
 		}
 		seen[id]++
 	}
+	return ids
 }
 
 var idPattern = regexp.MustCompile(`^(\d\d)(\d\d)-(\d\d)(\d\d)[b-z]?$`)
@@ -259,6 +317,80 @@ func fromSamples(in Input, from, to int64) ([]Event, []Session, Totals) {
 		}
 	}
 	return events, sessions, tot
+}
+
+// charges walks the batlog samples for runs on AC. A run counts from a plug
+// event the samples hold: one already on AC at the first sample has no
+// known start, so it is left out (the caller loads from the battery sample
+// before any AC run the range starts in).
+func charges(in Input, from, to int64) []ChargeSession {
+	var (
+		out  []ChargeSession
+		cur  *ChargeSession
+		hold int64
+	)
+	ss := in.Samples
+	closeRun := func(end int64, ongoing bool) {
+		cur.Ongoing = ongoing
+		if !ongoing {
+			cur.End = end
+		}
+		if cur.FullAt != 0 {
+			cur.AtFullMin = int((end - cur.FullAt) / 60)
+		}
+		cur.HoldMin = int(hold / 60)
+		if cur.Ongoing || cur.End > from {
+			out = append(out, *cur)
+		}
+		cur = nil
+	}
+	for i, s := range ss {
+		if i > 0 && s.OnAC != ss[i-1].OnAC {
+			if s.OnAC {
+				cur = &ChargeSession{Start: s.TS, StartPct: s.Pct}
+				hold = 0
+			} else if cur != nil {
+				closeRun(s.TS, false)
+			}
+		}
+		if cur == nil || !s.OnAC {
+			continue
+		}
+		cur.EndPct, cur.Charging = s.Pct, s.Charging
+		if s.Pct >= 100 && cur.FullAt == 0 {
+			cur.FullAt = s.TS
+			// Woke to a full battery that was not full before the sleep.
+			cur.FullUpperBound = s.TS > cur.Start && s.TS-ss[i-1].TS > sleepGap && ss[i-1].Pct < 100
+		}
+		if i+1 == len(ss) {
+			break
+		}
+		next := ss[i+1]
+		switch dt := next.TS - s.TS; {
+		case dt <= sleepGap:
+			// Up to the next sample, as every interval: the unplug lands
+			// somewhere in the last one.
+			if !s.Charging && s.Pct < 100 && cur.FullAt == 0 {
+				hold += dt
+				cur.HoldPct = s.Pct
+			}
+		case startInside(in.RunStarts, s.TS, next.TS):
+			cur.DataGap = true
+		}
+	}
+	if cur != nil {
+		// After the last sample the Mac slept until it woke, as fromSamples
+		// reads it; a recorder silent for longer than that is down.
+		end, last := to, ss[len(ss)-1].TS
+		tail := max(last, in.WokeAt)
+		if to-tail > staleAfter {
+			cur.DataGap = true
+			end = tail
+		}
+		cur.Current = to-last <= sleepGap
+		closeRun(end, true)
+	}
+	return out
 }
 
 // fromPmset covers the part of the range before the daemon's first sample.

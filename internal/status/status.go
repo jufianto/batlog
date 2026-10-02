@@ -47,6 +47,9 @@ type Report struct {
 	FullyCharged bool
 	Watts        *float64
 	MacOSMinutes *int // macOS's estimate; only while discharging
+	// EstToFull is batlog's time to full from the charge curve, set by the
+	// caller; MacOSToFull is macOS's own. Both only while charging.
+	EstToFull, MacOSToFull *int
 
 	HasData    bool // any daemon samples in the window (energy buckets reach further back)
 	Collecting bool // on battery with data but fewer than minSamples usable rows
@@ -73,6 +76,11 @@ func Build(s battery.Snapshot, samples []store.Sample, energy []store.AppEnergy,
 	if s.HasMacOSMinutes && !s.OnAC {
 		m := s.MacOSMinutes
 		r.MacOSMinutes = &m
+	}
+	// At 100 % macOS still reports a time while it tops up; batlog has none.
+	if s.HasMacOSToFull && s.OnAC && s.Charging && s.Percent < 100 {
+		m := s.MacOSToFull
+		r.MacOSToFull = &m
 	}
 
 	if !s.OnAC && len(samples) > 0 {

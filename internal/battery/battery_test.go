@@ -35,6 +35,10 @@ func TestParseAppleSilicon(t *testing.T) {
 	if !s.HasMacOSMinutes || s.MacOSMinutes != 10 {
 		t.Errorf("MacOSMinutes = %d (has=%v), want 10", s.MacOSMinutes, s.HasMacOSMinutes)
 	}
+	// Charging at 99%: AvgTimeToFull is macOS's time to full.
+	if !s.HasMacOSToFull || s.MacOSToFull != 10 {
+		t.Errorf("MacOSToFull = %d (has=%v), want 10", s.MacOSToFull, s.HasMacOSToFull)
+	}
 	if s.RawCurrentMAh != 5316 || s.RawMaxMAh != 5424 {
 		t.Errorf("raw mAh = %d/%d, want 5316/5424", s.RawCurrentMAh, s.RawMaxMAh)
 	}
@@ -54,6 +58,9 @@ func TestParseAppleSiliconOnBattery(t *testing.T) {
 	}
 	if !s.HasMacOSMinutes || s.MacOSMinutes != 119 {
 		t.Errorf("MacOSMinutes = %d (has=%v), want 119", s.MacOSMinutes, s.HasMacOSMinutes)
+	}
+	if s.HasMacOSToFull {
+		t.Errorf("on battery: MacOSToFull = %d, want none (AvgTimeToFull is 65535)", s.MacOSToFull)
 	}
 	if s.RawCurrentMAh != 3593 || s.RawMaxMAh != 5447 {
 		t.Errorf("raw mAh = %d/%d, want 3593/5447", s.RawCurrentMAh, s.RawMaxMAh)

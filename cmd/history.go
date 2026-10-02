@@ -13,6 +13,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/jufianto/batlog/internal/charge"
 	"github.com/jufianto/batlog/internal/history"
 	"github.com/jufianto/batlog/internal/localday"
 	"github.com/jufianto/batlog/internal/pmset"
@@ -137,14 +138,18 @@ func runHistory(ctx context.Context, out, errw io.Writer, rg timeRange, events, 
 	}
 
 	r := history.Build(in)
+	var curve *charge.Curve
+	if hasDB && chargingNow(r) {
+		curve = loadCurve(ctx, errw, rg.To)
+	}
 	switch {
 	case asJSON && events:
 		return writeEventsJSON(out, rg, r)
 	case asJSON:
-		return writeHistoryJSON(out, rg, r)
+		return writeHistoryJSON(out, rg, r, curve)
 	}
 	fmt.Fprintf(out, "📅 %s\n", rg.Title)
-	if len(r.Events) == 0 && (events || len(r.Sessions) == 0) {
+	if len(r.Events) == 0 && (events || len(r.Sessions) == 0 && len(r.ChargeSessions) == 0) {
 		fmt.Fprintln(out, "no charge/discharge events in this range")
 		switch {
 		case !hasDB || in.FirstSampleTS == 0:
@@ -162,7 +167,7 @@ func runHistory(ctx context.Context, out, errw io.Writer, rg timeRange, events, 
 		renderEvents(out, r.Events, rg.To)
 		return nil
 	}
-	renderHistory(out, r, rg.To)
+	renderHistory(out, r, rg.To, curve)
 	fmt.Fprintln(out)
 	if in.FirstSampleTS == 0 { // pmset rows only: there are no totals
 		fmt.Fprintln(out, "no history yet: `batlog daemon install` starts recording")
@@ -172,8 +177,10 @@ func runHistory(ctx context.Context, out, errw io.Writer, rg timeRange, events, 
 	return nil
 }
 
-// loadSamples reads from the start of the battery run that holds rg.From,
-// so a session that began before the range keeps its real start.
+// loadSamples reads from the start of the run that holds rg.From, so a
+// battery or charge session that began before the range keeps its real
+// start: from the last AC sample before a battery run, or the last battery
+// sample before an AC run.
 func loadSamples(ctx context.Context, db *store.DB, in *history.Input) error {
 	_, first, err := db.SampleStats(ctx)
 	if err != nil {
@@ -187,17 +194,15 @@ func loadSamples(ctx context.Context, db *store.DB, in *history.Input) error {
 		return err
 	}
 	if ok {
-		start = s.TS
-		if !s.OnAC {
-			ac, ok, err := db.LastSampleBeforeWithState(ctx, s.TS, true)
-			switch {
-			case err != nil:
-				return err
-			case ok:
-				start = ac.TS
-			default:
-				start = first
-			}
+		// The sample before the run is in the other state.
+		before, ok, err := db.LastSampleBeforeWithState(ctx, s.TS, !s.OnAC)
+		switch {
+		case err != nil:
+			return err
+		case ok:
+			start = before.TS
+		default:
+			start = first
 		}
 	}
 	if in.Samples, err = db.SamplesSince(ctx, start); err != nil {
@@ -207,7 +212,65 @@ func loadSamples(ctx context.Context, db *store.DB, in *history.Input) error {
 	return err
 }
 
-func renderHistory(w io.Writer, r history.Result, t time.Time) {
+// curveDays is how far back the charge curve learns from.
+const curveDays = 30
+
+// chargingNow reports whether the newest charge session has a time to full
+// to estimate.
+func chargingNow(r history.Result) bool {
+	n := len(r.ChargeSessions)
+	return n > 0 && estimable(r.ChargeSessions[n-1])
+}
+
+// estimable: ongoing, charging below 100 % at a sample from the last 90 s,
+// with the recorder writing. An old percent gives no time to full.
+func estimable(c history.ChargeSession) bool {
+	return c.Ongoing && c.Charging && c.Current && !c.DataGap && c.EndPct < 100
+}
+
+// loadCurve learns this Mac's charge curve from the last curveDays. A
+// failed read is a warning and no estimate.
+func loadCurve(ctx context.Context, errw io.Writer, t time.Time) *charge.Curve {
+	p, err := dbPath()
+	if err != nil {
+		return nil
+	}
+	db, err := store.Open(p, true)
+	if err != nil {
+		fmt.Fprintf(errw, "warning: %v\n", err)
+		return nil
+	}
+	defer db.Close()
+	return learnCurve(ctx, db, errw, t)
+}
+
+// learnCurve is loadCurve on an open database.
+func learnCurve(ctx context.Context, db *store.DB, errw io.Writer, t time.Time) *charge.Curve {
+	bands, err := db.ChargeBands(ctx, t.AddDate(0, 0, -curveDays).Unix())
+	if err != nil {
+		fmt.Fprintf(errw, "warning: reading the charge curve: %v\n", err)
+		return nil
+	}
+	var st [charge.Bands]charge.BandStat
+	for _, b := range bands {
+		if b.Band >= 0 && b.Band < charge.Bands {
+			st[b.Band] = charge.BandStat{Gained: b.Gained, Sec: b.Sec}
+		}
+	}
+	c := charge.Learn(st)
+	return &c
+}
+
+// estToFull is the curve's time to full for an ongoing charging session.
+func estToFull(c history.ChargeSession, curve *charge.Curve) *int {
+	if curve == nil || !estimable(c) {
+		return nil
+	}
+	m := curve.MinutesToFull(c.EndPct)
+	return &m
+}
+
+func renderHistory(w io.Writer, r history.Result, t time.Time, curve *charge.Curve) {
 	line := func(label, value string) { fmt.Fprintf(w, "%-19s%s\n", label, value) }
 	at := func(e *history.Event) string {
 		if e == nil {
@@ -231,6 +294,67 @@ func renderHistory(w io.Writer, r history.Result, t time.Time) {
 		fmt.Fprintln(w, "battery sessions")
 		renderSessions(w, r.Sessions, t)
 	}
+	if len(r.ChargeSessions) > 0 {
+		fmt.Fprintln(w)
+		fmt.Fprintln(w, "charging sessions")
+		renderCharges(w, r.ChargeSessions, t, curve)
+	}
+}
+
+// minHoldMin is the least not-charging time a charge session mentions.
+const minHoldMin = 5
+
+// renderCharges prints one line per charge session: how it got to full,
+// how long it then stayed plugged in at 100 %, and any hold below it.
+func renderCharges(w io.Writer, cs []history.ChargeSession, t time.Time, curve *charge.Curve) {
+	tw := newTable(w)
+	for _, c := range cs {
+		end := "now"
+		if !c.Ongoing {
+			end = clock(c.End, t)
+		}
+		var parts []string
+		switch {
+		case c.FullAt == c.Start:
+			parts = append(parts, "already full")
+		case c.FullAt != 0:
+			bound := ""
+			if c.FullUpperBound {
+				bound = "≤ "
+			}
+			parts = append(parts, "full in "+bound+fmtDuration(int((c.FullAt-c.Start)/60)))
+		case !c.Ongoing:
+			parts = append(parts, "unplugged before full")
+		case c.Charging:
+			p := "charging"
+			if m := estToFull(c, curve); m != nil {
+				p += " · full in ~" + fmtDuration(*m)
+			}
+			parts = append(parts, p)
+		default:
+			parts = append(parts, "not charging")
+		}
+		if c.FullAt != 0 {
+			at := fmtDuration(c.AtFullMin) + " at 100%"
+			if c.Ongoing {
+				at += " so far"
+			}
+			parts = append(parts, at)
+		}
+		if c.HoldMin >= minHoldMin {
+			parts = append(parts, fmt.Sprintf("not charging at %d%% for %s", c.HoldPct, fmtDuration(c.HoldMin)))
+		}
+		var tags []string
+		if c.Ongoing {
+			tags = append(tags, "(ongoing)")
+		}
+		if c.DataGap {
+			tags = append(tags, "(data gap)")
+		}
+		fmt.Fprintf(tw, "  %s\t%s → %s\t%d%% → %d%%\t%s\t%s\n",
+			c.ID, clock(c.Start, t), end, c.StartPct, c.EndPct, strings.Join(parts, " · "), strings.Join(tags, " "))
+	}
+	tw.Flush()
 }
 
 // renderSessions prints one line per session, as `history` and `report` list them.
@@ -373,14 +497,52 @@ type totalsJSON struct {
 	GapMin     int64 `json:"gap_min"`
 }
 
+type chargeJSON struct {
+	ID                 string `json:"id"`
+	Start              int64  `json:"start"`
+	End                *int64 `json:"end"`
+	StartPct           int    `json:"start_pct"`
+	EndPct             int    `json:"end_pct"`
+	FullAt             *int64 `json:"full_at"`
+	MinutesToFull      *int   `json:"minutes_to_full"`
+	FullIsUpperBound   bool   `json:"full_is_upper_bound"`
+	MinutesAtFull      *int   `json:"minutes_at_full"`
+	NotChargingMinutes int    `json:"not_charging_minutes"`
+	NotChargingPct     *int   `json:"not_charging_pct"`
+	EstMinutesToFull   *int   `json:"est_minutes_to_full"`
+	Charging           bool   `json:"charging"`
+	Ongoing            bool   `json:"ongoing"`
+	DataGap            bool   `json:"data_gap"`
+}
+
 // historyJSON is the schema from docs/specs/F3-history.md.
 type historyJSON struct {
-	Range         rangeJSON     `json:"range"`
-	FirstCharge   *eventJSON    `json:"first_charge"`
-	LastUnplug    *eventJSON    `json:"last_unplug"`
-	BatteryLasted *lastedJSON   `json:"battery_lasted"`
-	Sessions      []sessionJSON `json:"sessions"`
-	Totals        totalsJSON    `json:"totals"`
+	Range          rangeJSON     `json:"range"`
+	FirstCharge    *eventJSON    `json:"first_charge"`
+	LastUnplug     *eventJSON    `json:"last_unplug"`
+	BatteryLasted  *lastedJSON   `json:"battery_lasted"`
+	Sessions       []sessionJSON `json:"sessions"`
+	ChargeSessions []chargeJSON  `json:"charge_sessions"`
+	Totals         totalsJSON    `json:"totals"`
+}
+
+func toChargeJSON(c history.ChargeSession, curve *charge.Curve) chargeJSON {
+	j := chargeJSON{ID: c.ID, Start: c.Start, StartPct: c.StartPct, EndPct: c.EndPct, FullIsUpperBound: c.FullUpperBound,
+		NotChargingMinutes: c.HoldMin, EstMinutesToFull: estToFull(c, curve), Charging: c.Charging && c.Ongoing,
+		Ongoing: c.Ongoing, DataGap: c.DataGap}
+	if !c.Ongoing {
+		end := c.End
+		j.End = &end
+	}
+	if c.FullAt != 0 {
+		at, to, full := c.FullAt, int((c.FullAt-c.Start)/60), c.AtFullMin
+		j.FullAt, j.MinutesToFull, j.MinutesAtFull = &at, &to, &full
+	}
+	if c.HoldMin > 0 {
+		p := c.HoldPct
+		j.NotChargingPct = &p
+	}
+	return j
 }
 
 func toEventJSON(e *history.Event) *eventJSON {
@@ -390,12 +552,13 @@ func toEventJSON(e *history.Event) *eventJSON {
 	return &eventJSON{TS: e.TS, Type: eventType(*e), Pct: e.Pct, Source: e.Source}
 }
 
-func writeHistoryJSON(out io.Writer, rg timeRange, r history.Result) error {
+func writeHistoryJSON(out io.Writer, rg timeRange, r history.Result, curve *charge.Curve) error {
 	j := historyJSON{
-		Range:       rangeJSON{rg.From.Unix(), rg.To.Unix()},
-		FirstCharge: toEventJSON(r.FirstCharge),
-		LastUnplug:  toEventJSON(r.LastUnplug),
-		Sessions:    []sessionJSON{},
+		Range:          rangeJSON{rg.From.Unix(), rg.To.Unix()},
+		FirstCharge:    toEventJSON(r.FirstCharge),
+		LastUnplug:     toEventJSON(r.LastUnplug),
+		Sessions:       []sessionJSON{},
+		ChargeSessions: []chargeJSON{},
 		Totals: totalsJSON{BatteryMin: r.Totals.BatterySec / 60, ACMin: r.Totals.ACSec / 60,
 			SleepMin: r.Totals.SleepSec / 60, GapMin: r.Totals.GapSec / 60},
 	}
@@ -404,6 +567,9 @@ func writeHistoryJSON(out io.Writer, rg timeRange, r history.Result) error {
 	}
 	for _, s := range r.Sessions {
 		j.Sessions = append(j.Sessions, toSessionJSON(s))
+	}
+	for _, c := range r.ChargeSessions {
+		j.ChargeSessions = append(j.ChargeSessions, toChargeJSON(c, curve))
 	}
 	return json.NewEncoder(out).Encode(j)
 }

@@ -579,3 +579,31 @@ func TestRollupStorage(t *testing.T) {
 		t.Errorf("empty day = %+v %v, want a row with NULL app_energy", r, ok)
 	}
 }
+
+func TestChargeBands(t *testing.T) {
+	db, _ := openTemp(t)
+	ctx := context.Background()
+	tick := func(ts int64, pct int, onAC, charging bool) {
+		t.Helper()
+		if err := db.WriteTick(ctx, Tick{TS: ts, Pct: pct, OnAC: onAC, Charging: charging}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	tick(0, 18, false, false)  // on battery: not counted
+	tick(60, 19, true, true)   // 19 → 20 in band 1
+	tick(120, 20, true, true)  // 20 → 21 in band 2
+	tick(180, 21, true, true)  // asleep 10 min: not counted
+	tick(780, 30, true, true)  // 30 → 30 in band 3
+	tick(840, 30, true, false) // not charging (on hold): not counted
+	tick(900, 30, true, false)
+	tick(960, 100, true, true) // at 100: not counted
+	tick(1020, 100, true, true)
+	got, err := db.ChargeBands(ctx, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []ChargeBand{{1, 1, 60}, {2, 1, 60}, {3, 0, 60}}
+	if fmt.Sprint(got) != fmt.Sprint(want) {
+		t.Errorf("bands = %v, want %v", got, want)
+	}
+}

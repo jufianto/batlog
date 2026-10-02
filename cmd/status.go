@@ -10,6 +10,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/jufianto/batlog/internal/battery"
+	"github.com/jufianto/batlog/internal/charge"
 	"github.com/jufianto/batlog/internal/energy"
 	"github.com/jufianto/batlog/internal/paths"
 	"github.com/jufianto/batlog/internal/status"
@@ -47,6 +48,10 @@ func runStatus(ctx context.Context, out, errw io.Writer, asJSON bool) error {
 
 	var samples []store.Sample
 	var energy []store.AppEnergy
+	// Without the daemon's history the curve is the default one: a time
+	// to full is still better than none.
+	def := charge.Learn([charge.Bands]charge.BandStat{})
+	curve := &def
 	dbBroken := false
 	if p, err := dbPath(); err == nil && store.Exists(p) {
 		// A database that fails to open is a warning, never a reason to hide
@@ -65,10 +70,20 @@ func runStatus(ctx context.Context, out, errw io.Writer, asJSON bool) error {
 				fmt.Fprintf(errw, "warning: reading app energy: %v\n", err)
 				energy = nil
 			}
+			if snap.OnAC && snap.Charging && snap.Percent < 100 {
+				// A failed read keeps the default curve.
+				if c := learnCurve(ctx, db, errw, t); c != nil {
+					curve = c
+				}
+			}
 		}
 	}
 
 	r := status.Build(snap, samples, energy, t)
+	if r.OnAC && r.Charging && r.Percent < 100 && curve != nil {
+		m := curve.MinutesToFull(r.Percent)
+		r.EstToFull = &m
+	}
 	if asJSON {
 		return writeStatusJSON(out, r)
 	}
@@ -86,6 +101,8 @@ type statusJSON struct {
 	DrainPctPerHr   *float64      `json:"drain_pct_per_hr"`
 	EstMinutesLeft  *int          `json:"est_minutes_left"`
 	MacOSEstMinutes *int          `json:"macos_est_minutes"`
+	EstToFull       *int          `json:"est_minutes_to_full"`
+	MacOSToFull     *int          `json:"macos_minutes_to_full"`
 	WorstOffender   *offenderJSON `json:"worst_offender"`
 }
 
@@ -104,6 +121,8 @@ func writeStatusJSON(out io.Writer, r status.Report) error {
 		DrainPctPerHr:   r.Drain,
 		EstMinutesLeft:  r.EstMinutes,
 		MacOSEstMinutes: r.MacOSMinutes,
+		EstToFull:       r.EstToFull,
+		MacOSToFull:     r.MacOSToFull,
 	}
 	if r.Worst != nil {
 		j.WorstOffender = &offenderJSON{App: r.Worst.App, EnergyShare: round2(r.Worst.Share)}
@@ -160,6 +179,16 @@ func renderStatus(w io.Writer, r status.Report, dbBroken bool) {
 		if len(parts) > 0 {
 			fmt.Fprintf(w, "est. left   %s\n", joinDot(parts))
 		}
+	}
+	var full []string
+	if r.EstToFull != nil {
+		full = append(full, fmtDuration(*r.EstToFull)+"  (batlog)")
+	}
+	if r.MacOSToFull != nil {
+		full = append(full, fmtDuration(*r.MacOSToFull)+" (macOS)")
+	}
+	if len(full) > 0 {
+		fmt.Fprintf(w, "est. full   %s\n", joinDot(full))
 	}
 	if r.Worst != nil {
 		fmt.Fprintf(w, "worst now   %s  (%.0f%% of energy)\n", r.Worst.App, r.Worst.Share*100)

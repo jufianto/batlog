@@ -257,3 +257,39 @@ func TestStatusTipAfterUninstallKeptTheData(t *testing.T) {
 		t.Errorf("no recent samples in a healthy database: want the tip\n%s", out.String())
 	}
 }
+
+func TestStatusChargingShowsTimeToFull(t *testing.T) {
+	snap := battery.Snapshot{Percent: 82, OnAC: true, Charging: true, Watts: 41.8, HasWatts: true, MacOSToFull: 30, HasMacOSToFull: true}
+	stubStatus(t, snap, filepath.Join(t.TempDir(), "missing.db"))
+	var out, errw bytes.Buffer
+	if err := runStatus(context.Background(), &out, &errw, false); err != nil {
+		t.Fatal(err)
+	}
+	// Without history, the default curve: 8 % at 48 %/hr + 10 % at 22 %/hr = 37 min.
+	if !strings.Contains(out.String(), "\nest. full   37m  (batlog) · 30m (macOS)\n") {
+		t.Errorf("got %q", out.String())
+	}
+	out.Reset()
+	if err := runStatus(context.Background(), &out, &errw, true); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out.String(), `"est_minutes_to_full":37,"macos_minutes_to_full":30`) {
+		t.Errorf("json = %s", out.String())
+	}
+
+	// Full, or on battery: no time to full.
+	stubStatus(t, battery.Snapshot{Percent: 100, OnAC: true, FullyCharged: true}, filepath.Join(t.TempDir(), "missing.db"))
+	out.Reset()
+	if err := runStatus(context.Background(), &out, &errw, true); err != nil || !strings.Contains(out.String(), `"est_minutes_to_full":null,"macos_minutes_to_full":null`) {
+		t.Errorf("full: %v %s", err, out.String())
+	}
+}
+
+func TestStatusTopUpAt100HasNoTimeToFull(t *testing.T) {
+	// macOS still reports AvgTimeToFull while topping up at 100 %.
+	stubStatus(t, battery.Snapshot{Percent: 100, OnAC: true, Charging: true, MacOSToFull: 4, HasMacOSToFull: true}, filepath.Join(t.TempDir(), "missing.db"))
+	var out, errw bytes.Buffer
+	if err := runStatus(context.Background(), &out, &errw, false); err != nil || strings.Contains(out.String(), "est. full") {
+		t.Errorf("%v\n%s", err, out.String())
+	}
+}
