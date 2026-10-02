@@ -1,16 +1,55 @@
 name: ci
 
+# Public repo: GitHub-hosted runners are free here. The settings below keep
+# runs short anyway, and would matter if minutes were ever billed (a macOS
+# minute counts as ten).
 on:
   push:
     branches: [master]
+    paths-ignore:
+      - "**.md"
+      - "docs/**"
+      - "LICENSE"
+      - ".github/ISSUE_TEMPLATE/**"
+      - ".github/pull_request_template.md"
   pull_request:
+    paths-ignore:
+      - "**.md"
+      - "docs/**"
+      - "LICENSE"
+      - ".github/ISSUE_TEMPLATE/**"
+      - ".github/pull_request_template.md"
+
+# A newer push to the same PR or branch cancels the run it makes stale.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
 
 jobs:
-  test:
-    strategy:
-      matrix:
-        os: [ubuntu-latest, macos-latest]
-    runs-on: ${{ matrix.os }}
+  # Linux first: it is cheap and catches most breakage (vet, the
+  # non-darwin stubs, every pure package).
+  linux:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      CGO_ENABLED: "0"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - run: go vet ./...
+      - run: go test ./...
+      - run: go build .
+
+  # The darwin probes only run on a Mac; skip it when Linux already failed.
+  macos:
+    needs: linux
+    runs-on: macos-latest
+    timeout-minutes: 10
     env:
       CGO_ENABLED: "0"
     steps:

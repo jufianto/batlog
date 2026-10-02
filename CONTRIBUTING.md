@@ -63,7 +63,8 @@ no energy (some virtual machines).
 
 - Keep one change per PR, with tests. Behaviour changes update the command's
   spec in the same PR.
-- CI runs `go vet`, `go test` and `go build` on macOS and Linux.
+- CI runs `go vet`, `go test` and `go build` on Linux, then on macOS once
+  Linux passes. Changes that touch only docs (`*.md`, `docs/`) skip CI.
 - Commit messages say what changed and why, e.g. `fix(top): …` or
   `feat(daemon): …`.
 
