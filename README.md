@@ -67,9 +67,9 @@ data is kept.
 
 | Command | Answers |
 |---|---|
-| `batlog status` | level, drain rate, watts, a steady time-left estimate, the app using the most energy now |
+| `batlog status` | level, drain rate, watts, a steady time-left estimate (or time to full while charging), the app using the most energy now |
 | `batlog health [--trend]` | real capacity vs design, cycles, temperature, condition; decline per month |
-| `batlog history [--today\|--week\|--since 3d]` | first charge, last unplug, and each battery session with its ID and drain |
+| `batlog history [--today\|--week\|--since 3d]` | first charge, last unplug, each battery session with its ID and drain, and each charge: time to full and how long it then sat at 100% |
 | `batlog top [--today\|--week\|--since 12h\|--session <id\|last>\|--live]` | which apps used the most energy, and roughly what each cost the battery |
 | `batlog daemon install\|status\|logs\|uninstall` | the background recorder |
 | `batlog report [--daily\|--weekly\|--since 3d]` | a digest: battery life, worst drain, top 5 apps, charging habits with warnings, health |

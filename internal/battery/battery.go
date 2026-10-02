@@ -39,9 +39,13 @@ type Snapshot struct {
 	HasWatts        bool
 	MacOSMinutes    int // macOS's own time-remaining estimate; valid when HasMacOSMinutes
 	HasMacOSMinutes bool
-	RawCurrentMAh   int // gauge-measured; 0 when absent
-	RawMaxMAh       int
-	Health          Health
+	// MacOSToFull is macOS's own time-to-full estimate (AvgTimeToFull), in
+	// minutes; valid when HasMacOSToFull, which needs charging.
+	MacOSToFull    int
+	HasMacOSToFull bool
+	RawCurrentMAh  int // gauge-measured; 0 when absent
+	RawMaxMAh      int
+	Health         Health
 }
 
 // Health is the detail `batlog health` shows. Every field is nil when its
@@ -104,6 +108,9 @@ func Parse(data []byte) (Snapshot, error) {
 	}
 	if t, ok := intKey(m, "TimeRemaining"); ok && t >= 0 && t != timeUnknown {
 		s.MacOSMinutes, s.HasMacOSMinutes = int(t), true
+	}
+	if t, ok := intKey(m, "AvgTimeToFull"); ok && s.Charging && t >= 0 && t != timeUnknown {
+		s.MacOSToFull, s.HasMacOSToFull = int(t), true
 	}
 	s.Health = Health{
 		Cycles:        intPtr(m, "CycleCount"),

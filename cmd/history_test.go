@@ -46,7 +46,9 @@ func stubHistory(t *testing.T, nowMin int, segs [][5]int, runs []int64, pm []pms
 				if n > 1 {
 					p = sg[2] + (sg[3]-sg[2])*k/(n-1)
 				}
-				if err := db.WriteTick(ctx, store.Tick{TS: histAt(sg[0] + k), Pct: p, OnAC: sg[4] == 1}); err != nil {
+				// On AC below 100 % the Mac charges, as a real one does.
+				tick := store.Tick{TS: histAt(sg[0] + k), Pct: p, OnAC: sg[4] == 1, Charging: sg[4] == 1 && p < 100}
+				if err := db.WriteTick(ctx, tick); err != nil {
 					t.Fatal(err)
 				}
 			}
@@ -91,6 +93,9 @@ func TestHistoryTodayHuman(t *testing.T) {
 		"battery sessions\n" +
 		"  0925-2310   yesterday 23:10 → 01:00   1h 50m awake    100% → 90%   5.5 %/hr\n" +
 		"  0926-0200   02:00 → now               1h 58m so far   100% → 88%   5.6 %/hr   (ongoing)\n" +
+		"\n" +
+		"charging sessions\n" +
+		"  0926-0100   01:00 → 02:00   90% → 100%   full in 59m · 1m at 100%\n" +
 		"\n" +
 		"on battery 2h 58m · on AC 1h 00m · asleep 8h 01m\n"
 	if got != want {
@@ -408,5 +413,52 @@ func TestHistoryRangesWhereDSTSkipsMidnight(t *testing.T) {
 	}
 	if got := clock(time.Date(2026, 9, 5, 23, 30, 0, 0, loc).Unix(), time.Date(2026, 9, 7, 9, 0, 0, 0, loc)); got != "Sat 05 Sep 23:30" {
 		t.Errorf("clock = %q", got)
+	}
+}
+
+func TestHistoryChargeSessions(t *testing.T) {
+	// The daySegs charge, plus a charge still going at noon: plugged in at
+	// 11:40 at 40 %, at 50 % by 11:59.
+	segs := append(daySegs[:4:4], [5]int{660, 700, 94, 88, 0}, [5]int{700, 720, 40, 50, 1})
+	stubHistory(t, 719, segs, nil, nil, nil)
+	got, err := run(t, "history")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// 50 → 100 %: the 50s–80s on the default curve (10/78 + 10/69 + 10/64
+	// + 10/48 h = 38.3 min), the 90s learned from the 01:00 charge, which
+	// took 59 min for its 10 % (59 min): 97 min.
+	want := "charging sessions\n" +
+		"  0926-0100   01:00 → 02:00   90% → 100%   full in 59m · 1m at 100%\n" +
+		"  0926-1140   11:40 → now     40% → 50%    charging · full in ~1h 37m   (ongoing)\n"
+	if !strings.Contains(got, want) {
+		t.Errorf("got:\n%s\nwant it to contain:\n%s", got, want)
+	}
+	out, err := run(t, "history", "--json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, w := range []string{
+		`{"id":"0926-0100","start":` + jsonInt(histAt(60)) + `,"end":` + jsonInt(histAt(120)) + `,"start_pct":90,"end_pct":100,"full_at":` + jsonInt(histAt(119)) +
+			`,"minutes_to_full":59,"full_is_upper_bound":false,"minutes_at_full":1,"not_charging_minutes":0,"not_charging_pct":null,"est_minutes_to_full":null,"charging":false,"ongoing":false,"data_gap":false}`,
+		`"id":"0926-1140"`, `"est_minutes_to_full":97,"charging":true,"ongoing":true`,
+	} {
+		if !strings.Contains(out, w) {
+			t.Errorf("json lacks %s:\n%s", w, out)
+		}
+	}
+}
+
+func TestHistoryShowsAChargeWithNoEventsToday(t *testing.T) {
+	// Plugged in at 23:00 yesterday and still charging at noon: no plug
+	// or unplug today, but the charge is.
+	stubHistory(t, 719, [][5]int{{-120, -60, 80, 60, 0}, {-60, 720, 60, 99, 1}}, nil, nil, nil)
+	got, err := run(t, "history")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(got, "charging sessions\n  0925-2300   yesterday 23:00 → now   60% → 99%   charging · full in ~") ||
+		strings.Contains(got, "no charge/discharge events") {
+		t.Errorf("got:\n%s", got)
 	}
 }
