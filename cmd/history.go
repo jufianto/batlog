@@ -229,36 +229,41 @@ func renderHistory(w io.Writer, r history.Result, t time.Time) {
 	if len(r.Sessions) > 0 {
 		fmt.Fprintln(w)
 		fmt.Fprintln(w, "battery sessions")
-		tw := newTable(w)
-		for _, s := range r.Sessions {
-			end, awake, drain := "now", "—", ""
-			if !s.Ongoing {
-				end = clock(s.End, t)
-			}
-			if s.AwakeMin != nil {
-				awake = fmtDuration(*s.AwakeMin) + " awake"
-				if s.Ongoing {
-					awake = fmtDuration(*s.AwakeMin) + " so far"
-				}
-			}
-			if s.Drain != nil {
-				drain = fmt.Sprintf("%.1f %%/hr", *s.Drain)
-			}
-			var tags []string
-			if s.Ongoing {
-				tags = append(tags, "(ongoing)")
-			}
-			if s.DataGap {
-				tags = append(tags, "(data gap)")
-			}
-			if s.Source == history.SourcePmset {
-				tags = append(tags, "(pmset)")
-			}
-			fmt.Fprintf(tw, "  %s\t%s → %s\t%s\t%d%% → %d%%\t%s\t%s\n",
-				s.ID, clock(s.Start, t), end, awake, s.StartPct, s.EndPct, drain, strings.Join(tags, " "))
-		}
-		tw.Flush()
+		renderSessions(w, r.Sessions, t)
 	}
+}
+
+// renderSessions prints one line per session, as `history` and `report` list them.
+func renderSessions(w io.Writer, ss []history.Session, t time.Time) {
+	tw := newTable(w)
+	for _, s := range ss {
+		end, awake, drain := "now", "—", ""
+		if !s.Ongoing {
+			end = clock(s.End, t)
+		}
+		if s.AwakeMin != nil {
+			awake = fmtDuration(*s.AwakeMin) + " awake"
+			if s.Ongoing {
+				awake = fmtDuration(*s.AwakeMin) + " so far"
+			}
+		}
+		if s.Drain != nil {
+			drain = fmt.Sprintf("%.1f %%/hr", *s.Drain)
+		}
+		var tags []string
+		if s.Ongoing {
+			tags = append(tags, "(ongoing)")
+		}
+		if s.DataGap {
+			tags = append(tags, "(data gap)")
+		}
+		if s.Source == history.SourcePmset {
+			tags = append(tags, "(pmset)")
+		}
+		fmt.Fprintf(tw, "  %s\t%s → %s\t%s\t%d%% → %d%%\t%s\t%s\n",
+			s.ID, clock(s.Start, t), end, awake, s.StartPct, s.EndPct, drain, strings.Join(tags, " "))
+	}
+	tw.Flush()
 }
 
 func renderEvents(w io.Writer, events []history.Event, t time.Time) {
@@ -398,15 +403,19 @@ func writeHistoryJSON(out io.Writer, rg timeRange, r history.Result) error {
 		j.BatteryLasted = &lastedJSON{r.Lasted.Minutes, r.Lasted.Ongoing}
 	}
 	for _, s := range r.Sessions {
-		sj := sessionJSON{ID: s.ID, Start: s.Start, AwakeMinutes: s.AwakeMin, StartPct: s.StartPct, EndPct: s.EndPct,
-			DrainPctPerHr: s.Drain, Ongoing: s.Ongoing, DataGap: s.DataGap, Source: s.Source}
-		if !s.Ongoing {
-			end := s.End
-			sj.End = &end
-		}
-		j.Sessions = append(j.Sessions, sj)
+		j.Sessions = append(j.Sessions, toSessionJSON(s))
 	}
 	return json.NewEncoder(out).Encode(j)
+}
+
+func toSessionJSON(s history.Session) sessionJSON {
+	sj := sessionJSON{ID: s.ID, Start: s.Start, AwakeMinutes: s.AwakeMin, StartPct: s.StartPct, EndPct: s.EndPct,
+		DrainPctPerHr: s.Drain, Ongoing: s.Ongoing, DataGap: s.DataGap, Source: s.Source}
+	if !s.Ongoing {
+		end := s.End
+		sj.End = &end
+	}
+	return sj
 }
 
 func writeEventsJSON(out io.Writer, rg timeRange, r history.Result) error {
