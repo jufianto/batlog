@@ -1,8 +1,5 @@
 name: ci
 
-# Public repo: GitHub-hosted runners are free here. The settings below keep
-# runs short anyway, and would matter if minutes were ever billed (a macOS
-# minute counts as ten).
 on:
   push:
     branches: [master]
@@ -29,25 +26,9 @@ permissions:
   contents: read
 
 jobs:
-  # Linux first: it is cheap and catches most breakage (vet, the
-  # non-darwin stubs, every pure package).
-  linux:
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    env:
-      CGO_ENABLED: "0"
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
-        with:
-          go-version-file: go.mod
-      - run: go vet ./...
-      - run: go test ./...
-      - run: go build .
-
-  # The darwin probes only run on a Mac; skip it when Linux already failed.
-  macos:
-    needs: linux
+  # batlog runs only on macOS, so one Mac job tests it. The repo is public,
+  # so hosted runners cost nothing.
+  test:
     runs-on: macos-latest
     timeout-minutes: 10
     env:
@@ -60,3 +41,6 @@ jobs:
       - run: go vet ./...
       - run: go test ./...
       - run: go build .
+      # The non-darwin stubs keep the pure packages buildable elsewhere;
+      # vet them by cross-compiling instead of running a Linux machine.
+      - run: GOOS=linux go vet ./...
