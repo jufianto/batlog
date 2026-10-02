@@ -67,7 +67,7 @@ func TestHealthHuman(t *testing.T) {
 
 func TestHealthTrendWithoutHistory(t *testing.T) {
 	got, _ := runHealthT(t, macHealth, filepath.Join(t.TempDir(), "none.db"), true, false, false)
-	if !strings.HasSuffix(got, "condition      Normal\n\ntrend: not enough history yet (have 0 days, need 7)\n") {
+	if !strings.HasSuffix(got, "condition      Normal\n\ntrend: not enough history yet (have 0 days, need 30)\n") {
 		t.Errorf("got:\n%s", got)
 	}
 }
@@ -85,7 +85,7 @@ func TestHealthTrendFromDaemonRows(t *testing.T) {
 func TestHealthTrendTooShort(t *testing.T) {
 	db := healthDB(t, map[int]int{3: 880, 0: 879})
 	got, _ := runHealthT(t, macHealth, db, true, false, false)
-	if !strings.HasSuffix(got, "trend: not enough history yet (have 3 days, need 7)\n") {
+	if !strings.HasSuffix(got, "trend: not enough history yet (have 3 days, need 30)\n") {
 		t.Errorf("got:\n%s", got)
 	}
 }

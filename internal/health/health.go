@@ -17,8 +17,10 @@ const (
 	// WindowDays is how far back the trend looks.
 	WindowDays = 90
 	// MinSpanDays is the shortest span between first and last row that
-	// gives a trend worth printing.
-	MinSpanDays = 7
+	// gives a trend worth printing. The gauge's raw maximum recalibrates by
+	// several percent over days (seen live: 85.4 % → 90.4 % in a week) while
+	// real wear is under 1 %/month, so a week's fit is mostly noise.
+	MinSpanDays = 30
 	dayLayout   = "2006-01-02"
 )
 
