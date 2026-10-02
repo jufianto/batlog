@@ -141,7 +141,7 @@ func runTopRange(ctx context.Context, out, errw io.Writer, rg timeRange, label s
 	}
 	fmt.Fprintf(out, "⚡ top energy · %s   (%s awake, %s on battery, %d%% used)\n",
 		label, fmtDuration(int((tot.BatterySec+tot.ACSec)/60)), fmtDuration(int(tot.BatterySec/60)), tot.PctUsed)
-	renderTop(out, rk, first, rg.To)
+	renderTop(out, rk, first, rg.To, topN)
 	return nil
 }
 
@@ -248,7 +248,7 @@ func runTopSession(ctx context.Context, out, errw io.Writer, id string, t time.T
 		fmt.Fprintf(out, "no app energy for this session (recording started %s)\n", clock(first, t))
 		return nil
 	}
-	renderTop(out, rk, first, t)
+	renderTop(out, rk, first, t, topN)
 	if heavyOK {
 		fmt.Fprintf(out, "heaviest 30 min: %s → %s · %.1f W average\n",
 			clock(heavy.Start, t), time.Unix(heavy.End, 0).In(t.Location()).Format("15:04"), heavy.AvgWatts)
@@ -339,7 +339,7 @@ func runTopLive(out io.Writer, asJSON bool, t time.Time) error {
 	return nil
 }
 
-func renderTop(out io.Writer, rk ranked, first int64, t time.Time) {
+func renderTop(out io.Writer, rk ranked, first int64, t time.Time, n int) {
 	rows := rk.rows
 	if len(rows) == 0 {
 		fmt.Fprintln(out, "no app energy recorded for this range")
@@ -349,7 +349,7 @@ func renderTop(out io.Writer, rk ranked, first int64, t time.Time) {
 	tw := newTable(out)
 	fmt.Fprintln(tw, " #\tAPP\tSHARE\tBATTERY COST")
 	named := false
-	for i, r := range rows[:min(topN, len(rows))] {
+	for i, r := range rows[:min(n, len(rows))] {
 		cost := "—"
 		if r.BatteryPct != nil {
 			switch p := *r.BatteryPct; {
@@ -450,12 +450,16 @@ func writeTopJSON(out io.Writer, from, to int64, tot history.Totals, rk ranked, 
 	}
 	rows := rk.rows
 	for _, r := range rows[:min(topN, len(rows))] {
-		var est *float64
-		if r.BatteryPct != nil {
-			v := round1(*r.BatteryPct)
-			est = &v
-		}
-		j.Rows = append(j.Rows, topRowJSON{r.App, round4(r.Share), est, r.System, round1(r.EnergyJ)})
+		j.Rows = append(j.Rows, toTopRowJSON(r))
 	}
 	return json.NewEncoder(out).Encode(j)
+}
+
+func toTopRowJSON(r top.Row) topRowJSON {
+	var est *float64
+	if r.BatteryPct != nil {
+		v := round1(*r.BatteryPct)
+		est = &v
+	}
+	return topRowJSON{r.App, round4(r.Share), est, r.System, round1(r.EnergyJ)}
 }

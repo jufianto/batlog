@@ -20,9 +20,9 @@ app energy from about 21:45 only, when recording started; battery cost covers th
 heaviest 30 min: 21:20 → 21:50 · 20.0 W average
 ```
 
-> **Status: early (v0.1, pre-release), and in daily use.** `status`, `health`,
-> `history`, `top` and the background recorder work. `report` and `export`
-> are next.
+> **Status: early (v0.1, pre-release), and in daily use.** Every v1 command
+> works: `status`, `health`, `history`, `top`, `report`, `export` and the
+> background recorder.
 
 ## Why another battery tool
 
@@ -72,7 +72,8 @@ data is kept.
 | `batlog history [--today\|--week\|--since 3d]` | first charge, last unplug, and each battery session with its ID and drain |
 | `batlog top [--today\|--week\|--since 12h\|--session <id\|last>\|--live]` | which apps used the most energy, and roughly what each cost the battery |
 | `batlog daemon install\|status\|logs\|uninstall` | the background recorder |
-| `batlog report` · `batlog export` | *coming next*: a weekly digest, and your raw data as CSV/JSON |
+| `batlog report [--daily\|--weekly\|--since 3d]` | a digest: battery life, worst drain, top 5 apps, charging habits with warnings, health |
+| `batlog export samples\|apps\|health [--since 30d] [--json] [-o file]` | your raw data as CSV (the default) or JSON, for your own charts |
 
 Every command takes `--json`. Exit codes: 0 success (including "no data yet"),
 1 operational error, 2 usage error.
