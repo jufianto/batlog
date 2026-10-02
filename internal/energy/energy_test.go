@@ -60,6 +60,13 @@ func TestNameAndSystem(t *testing.T) {
 		{"Safari runs from its cryptex", []Member{member(900, "/System/Volumes/Preboot/Cryptexes/App/System/Applications/Safari.app/Contents/MacOS/Safari"),
 			member(901, "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.WebContent.xpc/Contents/MacOS/com.apple.WebKit.WebContent")}, "Safari", false},
 		{"System Settings is an app", []Member{member(5, "/System/Applications/System Settings.app/Contents/MacOS/System Settings")}, "System Settings", false},
+		// Seen live: Claude Code's coalition was named 2.1.285, and its
+		// kernel command is the version too.
+		{"a version-named executable takes its tool's folder", []Member{
+			{PID: 9188, Comm: "2.1.283", Path: "/Users/me/.local/share/claude/versions/2.1.283"},
+		}, "claude", false},
+		{"version folders and bin/ are skipped", []Member{member(7, "/opt/tools/mytool/v1.4.0/bin/1.4.0-rc1")}, "mytool", false},
+		{"a dotted name that is not a version stays", []Member{member(8, "/usr/local/bin/python3.13")}, "python3.13", false},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {

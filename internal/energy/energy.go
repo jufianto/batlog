@@ -6,6 +6,7 @@ package energy
 import (
 	"errors"
 	"fmt"
+	"regexp"
 	"slices"
 	"sort"
 	"strings"
@@ -90,7 +91,10 @@ type Delta struct {
 // Only a member's outermost bundle counts, and not when it sits inside a
 // framework: Homebrew's Python.framework/…/Python.app is how python runs,
 // not an app. Without a bundle, the name is the lowest pid's executable, or
-// its command when the path is unreadable.
+// its command when the path is unreadable. A tool that installs each
+// version as its own file (Claude Code's ~/.local/share/claude/versions/
+// 2.1.287) is named by the nearest folder above that is neither a version
+// nor a container like versions/ or bin/: "claude", whatever the version.
 //
 // system is true for bundles under /System/Library or /Library/Apple
 // (Dock, NotificationCenter; Finder excepted), and for bundle-less
@@ -145,12 +149,33 @@ func Name(members []Member) (name string, system bool) {
 	for _, m := range ms {
 		switch {
 		case m.Path != "":
-			return m.Path[strings.LastIndex(m.Path, "/")+1:], system
+			return exeName(m.Path), system
 		case m.Comm != "":
 			return m.Comm, system
 		}
 	}
 	return "", system
+}
+
+var versionLike = regexp.MustCompile(`^v?\d+(\.\d+)+([-+_.][0-9A-Za-z.]+)?$`)
+
+// containerDirs hold executables without naming them.
+var containerDirs = map[string]bool{"versions": true, "version": true, "bin": true, "libexec": true}
+
+// exeName is an executable's file name, or for a version-named file the
+// nearest folder above it that names the tool.
+func exeName(path string) string {
+	parts := strings.Split(path, "/")
+	base := parts[len(parts)-1]
+	if !versionLike.MatchString(base) {
+		return base
+	}
+	for i := len(parts) - 2; i >= 0; i-- {
+		if p := parts[i]; p != "" && !containerDirs[p] && !versionLike.MatchString(p) {
+			return p
+		}
+	}
+	return base
 }
 
 type bundleInfo struct {
