@@ -41,7 +41,7 @@ Every command supports `--json`. Behaviour lives in `docs/specs/`, one spec per 
 
 ## Out of scope for v1
 
-- **`batlog ui`**, a lazygit-style terminal UI → v1.1 (its history panels need real data to design against)
+- **`batlog ui`**, a lazygit-style terminal UI → v1.1 (its history panels need real data to design against; built as [F8](../specs/F8-ui.md))
 - **Charge-threshold notifications** → v1.1, its own PRD
 - **Changing anything on the system:** no process throttling, Low Power toggles or charge limiting — batlog only measures
 - Menu bar / GUI, iPhone/iPad batteries, desktop Macs

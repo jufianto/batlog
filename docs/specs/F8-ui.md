@@ -81,21 +81,24 @@ These carry over from the PRD: the UI adds a view, not a new behaviour.
   - A column's height is the **lowest** percent in its slice, so a drain
     is never hidden.
   - Colour shows the power source: on battery (default colour), on AC
-    (green), asleep (dim), no data (blank).
+    (green), asleep (dim), no data (blank). A lone sample with no
+    neighbour within 90 s is a dark wake (Power Nap) and is drawn asleep,
+    as F3 counts it.
   - The x axis marks hours for a day and weekdays for a week.
   - Without colour, AC columns use `▓` instead of `█`.
 - **Totals line:** the same one `history` prints under its lists.
 - **List:** battery sessions and charge sessions together, newest first.
   - Charges are marked `⚡`.
-  - The RESULT column holds the session's drain, or the charge's outcome:
-    `full 1h 16m`, `full ≤ 1h 21m`, `before full`, `charging · ~37m`.
-  - The same `(ongoing)` and `(data gap)` tags as F3, shortened to `…`
-    when the row is too narrow.
-- **Enter on a battery session** opens its detail view:
-  - the session's chart, zoomed to its own start and end;
-  - its F3 line;
-  - its top 5 apps with battery cost (the same as `top --session <id>`);
-  - its heaviest 30 minutes (F4).
+  - Columns: ID, `⚡` for a charge, WHEN, BATTERY (`99→62%`), LENGTH
+    (awake time, or time on the charger), RESULT. A narrower window drops
+    WHEN first (the ID holds the start), then LENGTH.
+  - RESULT is the session's drain, or the charge's outcome in F3's words
+    (`full in 1h 16m · 36m at 100%`, `96% in 1h 03m · unplugged before
+    full`, `charging · full in ~37m`). A row too long ends in `…`.
+  - The same `(ongoing)` and `(data gap)` tags as F3.
+- **Enter on a battery session** opens its detail view: the session's
+  chart, zoomed to its own start and end, then `top --session <id>` as it
+  prints (its line, top apps with battery cost, heaviest 30 minutes).
 - **Enter on a charge** opens its detail view:
   - the charge's chart;
   - start → end percent;
@@ -106,15 +109,15 @@ These carry over from the PRD: the UI adds a view, not a new behaviour.
 
 ### 2 Apps
 
-- **Table:** the F4 table for the range: rank, app, share with a bar, and
-  battery cost.
+- **Table:** the F4 table for the range: rank, app, share with a bar
+  scaled to the top app, and battery cost.
   - System apps are marked `⚙`, as in F4.
   - All apps are listed, scrollable; `top` cuts off at its N.
   - It shows the same notes as `top`, such as `app energy from about …`.
 - **Enter on an app** opens a chart of its energy over the range: one bar
   per hour for a day, one per day for a week. It comes from the 15-minute
-  `app_energy` buckets. Below the chart is the app's total and share, and
-  its peak hour or day.
+  `app_energy` buckets. Below the chart are the app's share and battery
+  cost, and its busiest hour or day with that bin's part of its energy.
 - With no app energy recorded: `no app energy recorded yet`.
 
 ### 3 Report
@@ -156,7 +159,7 @@ These carry over from the PRD: the UI adds a view, not a new behaviour.
 | `Esc` | back out of a detail, or close help |
 | `t` `w` `[` `]` | change the range (see Ranges) |
 | `r` | refresh now |
-| `?` | help: every key, with a line on what each view shows |
+| `?` | help, full screen: every key, what each view shows, the chart's legend |
 | `q`, `Ctrl-C` | quit |
 
 ## Refresh
@@ -183,7 +186,7 @@ These carry over from the PRD: the UI adds a view, not a new behaviour.
 
 | Case | Behaviour |
 |---|---|
-| No database or no samples | Status and Health work from live readings. Battery, Apps and Report show `no history yet — run 'batlog daemon install'` |
+| No database or no samples | The sidebar and Health work from live readings. Battery and Report show `no history yet — run 'batlog daemon install'`, Apps `no app energy recorded yet — run …` |
 | Recorder stopped | Data line in yellow (see Sidebar). The views show the data that exists |
 | No app energy | Apps: `no app energy recorded yet`. Battery details have no app list |
 | Health table empty | The Health view shows the current reading only, with `no daily history yet` instead of the chart |
@@ -195,18 +198,21 @@ These carry over from the PRD: the UI adds a view, not a new behaviour.
 
 ## Acceptance criteria
 
-- [ ] For the same range, every number in a view equals the matching
+- [x] For the same range, every number in a view equals the matching
       command's output: `status`, `health`, `history`, `top`, `report`.
       Tested against the CLI on one fixture database.
-- [ ] Rendering is a pure function of data and window size. Each view has
-      a golden test at 80×24 and at 120×40, in colour and with `NO_COLOR`.
-- [ ] Key flows are tested end to end on a fake data source:
+- [x] Rendering is a pure function of data and window size. Each view has
+      a golden test at 80×24 and at 120×40; every line fills the window
+      exactly, in colour and without.
+- [x] Key flows are tested end to end on a fake data source:
   - switch views;
   - open and close a detail;
   - `[` `]` at both ends of the data;
   - refresh keeps the selection by ID.
-- [ ] The database is opened read-only (test: the file's modification
+- [x] The database is opened read-only (test: the file's modification
       time is unchanged after a session of key presses).
-- [ ] Idle CPU under 1 % and memory under 50 MB with a week of data,
-      measured on the author's Mac.
-- [ ] A refresh of `last 7 days` takes under 300 ms on that Mac.
+- [x] Idle CPU under 1 % and memory under 50 MB with a week of data,
+      measured on the author's Mac: 0.2 % CPU over a minute with one
+      refresh (the renderer runs at 10 fps, not Bubble Tea's 60), 15–21 MB.
+- [x] A refresh of `last 7 days` takes under 300 ms on that Mac: each
+      read took 2–22 ms on a week of real data.

@@ -1,0 +1,24 @@
+┌ batlog ────────────────────┐┌ 1 Battery · last 7 days ───────────────────────┐
+│ 88% · on battery · 5.0 W   ││100│                                     ▂▃░▁   │
+│ drain 5.6 %/hr             ││   │                                     ██░█   │
+│ left 15h 40m · macOS 15h 0…││   │                                     ██░█   │
+│ top Brave Browser (75%)    ││ 50│                                     ██░█   │
+│                            ││   │                                     ██░█   │
+│ health 90.0% · 396 cycles  ││   │                                     ██░█   │
+│ condition Normal           ││  0│                                     ██░█   │
+│                            ││   └────────────────────────────────────────────│
+│ ▸ 1 Battery                ││    Sun   Mon   Tue   Wed    Thu   Fri   Sat    │
+│   2 Apps                   ││on battery 3h 48m · on AC 1h 10m · asleep 8h 01m│
+│   3 Report                 ││                                                │
+│   4 Health                 ││  ID            BATTERY  RESULT                 │
+│                            ││▸ 0926-0200     100→88%  5.6 %/hr  (ongoing)    │
+│ range last 7 days          ││  0926-0100  ⚡ 90→100%  full in 59m · 1m at 10…│
+│ data  just now             ││  0925-2310     100→90%  5.5 %/hr               │
+│                            ││                                                │
+│                            ││                                                │
+│                            ││                                                │
+│                            ││                                                │
+│                            ││                                                │
+│                            ││                                                │
+└────────────────────────────┘└────────────────────────────────────────────────┘
+ 1-4 view · ↑↓ select · enter open · t today · w week · [ ] earlier/later · r r…
