@@ -14,6 +14,7 @@ import (
 
 	"github.com/jufianto/batlog/internal/health"
 	"github.com/jufianto/batlog/internal/store"
+	"github.com/jufianto/batlog/internal/textfmt"
 )
 
 var healthTrend bool
@@ -163,28 +164,9 @@ func renderHealth(w io.Writer, r health.Report, withTrend bool, t *health.TrendR
 	fmt.Fprintf(w, "trend (%d days)   %.1f%% → %.1f%%   ≈ %s %%/month%s\n", t.Days, t.FromPct, t.ToPct, signed(t.PctPerMonth), stale)
 }
 
-// signed prints a rate with a typographic minus, or a plus for growth.
-func signed(v float64) string {
-	switch {
-	case v < 0:
-		return "−" + strconv.FormatFloat(-v, 'f', 2, 64)
-	case v > 0:
-		return "+" + strconv.FormatFloat(v, 'f', 2, 64)
-	}
-	return "0.00"
-}
+func signed(v float64) string { return textfmt.Signed(v) }
 
-// thousands groups digits with a space: 5424 → "5 424".
-func thousands(n int) string {
-	if n < 0 {
-		return "-" + thousands(-n)
-	}
-	s := strconv.Itoa(n)
-	for i := len(s) - 3; i > 0; i -= 3 {
-		s = s[:i] + " " + s[i:]
-	}
-	return s
-}
+func thousands(n int) string { return textfmt.Thousands(n) }
 
 func roundPtr(v *float64, places int) *float64 {
 	if v == nil {

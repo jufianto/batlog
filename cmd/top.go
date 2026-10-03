@@ -14,6 +14,7 @@ import (
 	"github.com/jufianto/batlog/internal/energy"
 	"github.com/jufianto/batlog/internal/history"
 	"github.com/jufianto/batlog/internal/store"
+	"github.com/jufianto/batlog/internal/textfmt"
 	"github.com/jufianto/batlog/internal/top"
 )
 
@@ -383,12 +384,7 @@ func appLabel(r top.Row) string {
 	return r.App
 }
 
-func pct(share float64) string {
-	if share > 0 && share < 0.005 {
-		return "< 1%"
-	}
-	return fmt.Sprintf("%.0f%%", share*100)
-}
+func pct(share float64) string { return textfmt.Share(share) }
 
 func round1(f float64) float64 { return math.Round(f*10) / 10 }
 func round4(f float64) float64 { return math.Round(f*1e4) / 1e4 }

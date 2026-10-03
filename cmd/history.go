@@ -18,6 +18,7 @@ import (
 	"github.com/jufianto/batlog/internal/localday"
 	"github.com/jufianto/batlog/internal/pmset"
 	"github.com/jufianto/batlog/internal/store"
+	"github.com/jufianto/batlog/internal/textfmt"
 )
 
 // readPmset is swapped by tests; the real one takes about two seconds.
@@ -222,11 +223,7 @@ func chargingNow(r history.Result) bool {
 	return n > 0 && estimable(r.ChargeSessions[n-1])
 }
 
-// estimable: ongoing, charging below 100 % at a sample from the last 90 s,
-// with the recorder writing. An old percent gives no time to full.
-func estimable(c history.ChargeSession) bool {
-	return c.Ongoing && c.Charging && c.Current && !c.DataGap && c.EndPct < 100
-}
+func estimable(c history.ChargeSession) bool { return c.Estimable() }
 
 // loadCurve learns this Mac's charge curve from the last curveDays. A
 // failed read is a warning and no estimate.
@@ -302,7 +299,7 @@ func renderHistory(w io.Writer, r history.Result, t time.Time, curve *charge.Cur
 }
 
 // minHoldMin is the least not-charging time a charge session mentions.
-const minHoldMin = 5
+const minHoldMin = textfmt.MinHoldMin
 
 // renderCharges prints one line per charge session: how it got to full,
 // how long it then stayed plugged in at 100 %, and any hold below it.
@@ -313,45 +310,7 @@ func renderCharges(w io.Writer, cs []history.ChargeSession, t time.Time, curve *
 		if !c.Ongoing {
 			end = clock(c.End, t)
 		}
-		var parts []string
-		switch {
-		case c.FullAt == c.Start:
-			parts = append(parts, "already full")
-		case c.FullAt != 0:
-			bound := ""
-			if c.FullUpperBound {
-				bound = "≤ "
-			}
-			parts = append(parts, "full in "+bound+fmtDuration(int((c.FullAt-c.Start)/60)))
-		case !c.Ongoing:
-			p := "unplugged before full"
-			if c.MaxPct > c.StartPct {
-				bound := ""
-				if c.MaxUpperBound {
-					bound = "≤ "
-				}
-				p = fmt.Sprintf("%d%% in %s%s · %s", c.MaxPct, bound, fmtDuration(int((c.MaxAt-c.Start)/60)), p)
-			}
-			parts = append(parts, p)
-		case c.Charging:
-			p := "charging"
-			if m := estToFull(c, curve); m != nil {
-				p += " · full in ~" + fmtDuration(*m)
-			}
-			parts = append(parts, p)
-		default:
-			parts = append(parts, "not charging")
-		}
-		if c.FullAt != 0 {
-			at := fmtDuration(c.AtFullMin) + " at 100%"
-			if c.Ongoing {
-				at += " so far"
-			}
-			parts = append(parts, at)
-		}
-		if c.HoldMin >= minHoldMin {
-			parts = append(parts, fmt.Sprintf("not charging at %d%% for %s", c.HoldPct, fmtDuration(c.HoldMin)))
-		}
+		parts := textfmt.ChargeOutcome(c, estToFull(c, curve))
 		var tags []string
 		if c.Ongoing {
 			tags = append(tags, "(ongoing)")
@@ -429,30 +388,9 @@ func (t *table) Flush() {
 	}
 }
 
-func totalsLine(t history.Totals) string {
-	parts := []string{
-		"on battery " + fmtDuration(int(t.BatterySec/60)),
-		"on AC " + fmtDuration(int(t.ACSec/60)),
-		"asleep " + fmtDuration(int(t.SleepSec/60)),
-	}
-	if t.GapSec > 0 {
-		parts = append(parts, "no data "+fmtDuration(int(t.GapSec/60)))
-	}
-	return joinDot(parts)
-}
+func totalsLine(t history.Totals) string { return textfmt.Totals(t) }
 
-// clock prints a time as 15:04 on t's day, "yesterday 15:04" the day
-// before, and "Thu 24 Sep 15:04" further back.
-func clock(ts int64, t time.Time) string {
-	at := time.Unix(ts, 0).In(t.Location())
-	switch day, today := localday.Start(at), localday.Start(t); {
-	case !day.Before(today):
-		return at.Format("15:04")
-	case localday.Next(day).Equal(today):
-		return at.Format("yesterday 15:04")
-	}
-	return at.Format("Mon 02 Jan 15:04")
-}
+func clock(ts int64, t time.Time) string { return textfmt.Clock(ts, t) }
 
 func pmsetTag(source string) string {
 	if source == history.SourcePmset {

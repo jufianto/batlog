@@ -7,6 +7,7 @@ import (
 	"errors"
 	"math"
 	"regexp"
+	"slices"
 	"strconv"
 	"time"
 
@@ -112,6 +113,13 @@ type ChargeSession struct {
 	DataGap bool
 }
 
+// Estimable reports whether the curve can give c a time to full: ongoing,
+// charging below 100 % at a sample from the last 90 s, with the recorder
+// writing. An old percent gives no time to full.
+func (c ChargeSession) Estimable() bool {
+	return c.Ongoing && c.Charging && c.Current && !c.DataGap && c.EndPct < 100
+}
+
 // Lasted answers "battery lasted": the ongoing session so far, or the last
 // completed one.
 type Lasted struct {
@@ -151,6 +159,10 @@ func Build(in Input) Result {
 	r.Sessions = append(r.Sessions, sessions...)
 	r.Totals = totals
 	r.ChargeSessions = charges(in, from, to)
+	// Samples run to now; a range that ends earlier (a past day) does not
+	// hold what started after it.
+	r.Sessions = slices.DeleteFunc(r.Sessions, func(s Session) bool { return s.Start > to })
+	r.ChargeSessions = slices.DeleteFunc(r.ChargeSessions, func(c ChargeSession) bool { return c.Start > to })
 	assignIDs(r.Sessions, in.From.Location())
 	ids := make([]int64, len(r.ChargeSessions))
 	for i, c := range r.ChargeSessions {
@@ -170,8 +182,9 @@ func Build(in Input) Result {
 			r.LastUnplug = e
 		}
 	}
-	if n := len(sessions); n > 0 {
-		last := sessions[n-1]
+	// pmset sessions all come before batlog's.
+	if n := len(r.Sessions); n > 0 && r.Sessions[n-1].Source == SourceBatlog {
+		last := r.Sessions[n-1]
 		r.Lasted = &Lasted{Minutes: *last.AwakeMin, Ongoing: last.Ongoing}
 	}
 	return r
