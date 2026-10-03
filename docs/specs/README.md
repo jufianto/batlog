@@ -14,8 +14,9 @@ implement [prd/tracker.md](../prd/tracker.md). Shared rules are in
 | [F5](./F5-daemon.md) | `batlog daemon` | — | ioreg and coalition energy probes, store, launchd |
 | [F6](./F6-report.md) | `batlog report` | yes | F2 + F3 + F4 |
 | [F7](./F7-export.md) | `batlog export` | yes | `samples`, `app_energy`, `health` |
+| [F8](./F8-ui.md) | `batlog ui` (v1.1) | for every view but status and health | F1 + F2 + F3 + F4 + F6 |
 
-**Build order:** F1 → F2 → F5 → F3 → F4 → F6 → F7.
+**Build order:** F1 → F2 → F5 → F3 → F4 → F6 → F7, then F8 for v1.1.
 
 ## Tables (shared by every spec)
 
