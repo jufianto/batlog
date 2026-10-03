@@ -11,6 +11,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/jufianto/batlog/internal/charge"
 	"github.com/jufianto/batlog/internal/health"
 	"github.com/jufianto/batlog/internal/history"
 	"github.com/jufianto/batlog/internal/localday"
@@ -81,6 +82,8 @@ type reportData struct {
 	energy   bool // any app energy recorded at all
 	first    int64
 	apps     ranked
+	charging report.Charging
+	curveMin *int // 20 % → full on this Mac's curve, when it has learned any of it
 	habits   report.Habits
 	flags    []report.Flag
 	health   *reportHealth
@@ -137,6 +140,11 @@ func runReport(ctx context.Context, out, errw io.Writer, kind string, rg timeRan
 		d.avg = &a
 	}
 	d.worst = report.Worst(ss, from)
+	d.charging = report.BuildCharging(d.hist.ChargeSessions, from)
+	if c := learnCurve(ctx, db, errw, rg.To); c != nil && learnedFrom(*c, curveFromPct) {
+		m := c.MinutesToFull(curveFromPct)
+		d.curveMin = &m
+	}
 	d.habits = report.BuildHabits(d.hist, in.Samples, in.RunStarts, from, to)
 	// The days the range touches; a DST week is still seven.
 	days := 1
@@ -254,6 +262,9 @@ func renderReport(w io.Writer, d reportData) {
 		renderTop(w, d.apps, d.first, t, reportTopN)
 	}
 
+	section(w, "charging")
+	renderCharging(w, d.charging, d.curveMin)
+
 	section(w, "habits & health")
 	h := d.habits
 	if h.PlugInMedian != nil && h.UnplugMedian != nil {
@@ -265,9 +276,6 @@ func renderReport(w io.Writer, d reportData) {
 	var parts []string
 	if h.Above90Share != nil {
 		parts = append(parts, "above 90% "+pct(*h.Above90Share)+" of the time", "below 20% "+pct(*h.Below20Share))
-	}
-	if h.MaxMinAt100OnAC > 0 {
-		parts = append(parts, "longest at 100% on AC "+fmtDuration(h.MaxMinAt100OnAC))
 	}
 	if len(parts) > 0 {
 		fmt.Fprintln(w, joinDot(parts))
@@ -281,6 +289,68 @@ func renderReport(w io.Writer, d reportData) {
 			line += fmt.Sprintf(" (%s %%/month)", signed(hh.trend.PctPerMonth))
 		}
 		fmt.Fprintln(w, line)
+	}
+}
+
+// curveFromPct is where the report's charge-curve line starts: about where
+// a battery is plugged in after a day's use.
+const curveFromPct = 20
+
+// learnedFrom reports whether the curve has learned any band from pct up,
+// so the line is this Mac's, not the default curve.
+func learnedFrom(c charge.Curve, pct int) bool {
+	for _, l := range c.Learned[pct/10:] {
+		if l {
+			return true
+		}
+	}
+	return false
+}
+
+// renderCharging prints the charging section: how many charges, how long
+// they took, how long the battery then sat full on the charger.
+func renderCharging(w io.Writer, c report.Charging, curveMin *int) {
+	if c.Charges == 0 {
+		fmt.Fprintln(w, "no charges in this range")
+		return
+	}
+	noun := "charges"
+	if c.Charges == 1 {
+		noun = "charge"
+	}
+	fmt.Fprintf(w, "%d %s · median start %s%% · %d reached full\n",
+		c.Charges, noun, report.FmtPct(*c.StartMedian), c.ReachedFull)
+	var speed []string
+	if c.ToFullMedian != nil {
+		speed = append(speed, "median time to full "+fmtDuration(*c.ToFullMedian))
+	}
+	if curveMin != nil {
+		speed = append(speed, fmt.Sprintf("%d%% → 100%% ≈ %s on this Mac", curveFromPct, fmtDuration(*curveMin)))
+	}
+	if len(speed) > 0 {
+		fmt.Fprintln(w, joinDot(speed))
+	}
+	if c.MaxAtFull > 0 {
+		var full []string
+		if c.AtFullMedian != nil {
+			full = append(full, "median "+fmtDuration(*c.AtFullMedian))
+		}
+		full = append(full, "longest "+fmtDuration(c.MaxAtFull))
+		fmt.Fprintln(w, "left plugged in at full: "+joinDot(full))
+	}
+	var below []string
+	if n := len(c.StoppedBelow); n > 0 {
+		pcts := make([]string, n)
+		for i, p := range c.StoppedBelow {
+			pcts[i] = fmt.Sprintf("%d%%", p)
+		}
+		below = append(below, fmt.Sprintf("stopped below full %d (%s)", n, strings.Join(pcts, ", ")))
+	}
+	if c.NotChargingMin >= minHoldMin {
+		below = append(below, "not charging below full "+fmtDuration(c.NotChargingMin))
+	}
+	if len(below) > 0 {
+		fmt.Fprintln(w, joinDot(below))
 	}
 }
 
@@ -349,6 +419,18 @@ type habitsJSON struct {
 	Flags             []flagJSON `json:"flags"`
 }
 
+type chargingJSON struct {
+	Charges              int      `json:"charges"`
+	ReachedFull          int      `json:"reached_full"`
+	StartMedianPct       *float64 `json:"start_median_pct"`
+	MinutesToFullMedian  *int     `json:"minutes_to_full_median"`
+	CurveMinutes20ToFull *int     `json:"curve_minutes_20_to_full"`
+	MinutesAtFullMedian  *int     `json:"minutes_at_full_median"`
+	MaxMinutesAtFull     int      `json:"max_minutes_at_full"`
+	StoppedBelowFullPct  []int    `json:"stopped_below_full_pct"`
+	NotChargingMinutes   int      `json:"not_charging_minutes"`
+}
+
 type reportHealthJSON struct {
 	HealthPct float64    `json:"health_pct"`
 	Day       string     `json:"day"`
@@ -363,6 +445,7 @@ type reportJSON struct {
 	Drain       drainJSON         `json:"drain"`
 	TopApps     []topRowJSON      `json:"top_apps"`
 	EnergySince *int64            `json:"energy_since"`
+	Charging    chargingJSON      `json:"charging"`
 	Habits      habitsJSON        `json:"habits"`
 	Health      *reportHealthJSON `json:"health"`
 }
@@ -376,6 +459,11 @@ func writeReportJSON(out io.Writer, d reportData) error {
 			SleepMin: tot.SleepSec / 60, GapMin: tot.GapSec / 60, Sessions: []sessionJSON{}},
 		Drain:   drainJSON{AvgPctPerHr: d.avg},
 		TopApps: []topRowJSON{},
+		Charging: chargingJSON{Charges: d.charging.Charges, ReachedFull: d.charging.ReachedFull,
+			StartMedianPct: d.charging.StartMedian, MinutesToFullMedian: d.charging.ToFullMedian,
+			CurveMinutes20ToFull: d.curveMin, MinutesAtFullMedian: d.charging.AtFullMedian,
+			MaxMinutesAtFull: d.charging.MaxAtFull, StoppedBelowFullPct: append([]int{}, d.charging.StoppedBelow...),
+			NotChargingMinutes: d.charging.NotChargingMin},
 		Habits: habitsJSON{CompletedSessions: d.habits.Completed, PlugInMedianPct: d.habits.PlugInMedian,
 			UnplugMedianPct: d.habits.UnplugMedian, TimeAbove90Share: roundPtr(d.habits.Above90Share, 4),
 			TimeBelow20Share: roundPtr(d.habits.Below20Share, 4), MaxMinutesAt100: d.habits.MaxMinAt100OnAC,

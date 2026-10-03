@@ -14,7 +14,7 @@ in v1 (see the PRD's out-of-scope list).
 
 ## Behaviour
 
-Four sections, all computed at read time from existing tables. Each section
+Five sections, all computed at read time from existing tables. Each section
 degrades on its own; one missing source never blanks the report.
 
 **Ranges:** `--daily` is local midnight → now, `--weekly` the last seven
@@ -41,14 +41,31 @@ session's window.
 **3. Top apps** — the F4 accumulated table, N = 5, with battery cost and
 F4's notes.
 
-**4. Habits and health**
+**4. Charging** — F3's charge sessions that **started** in the range (as
+for battery sessions, one that began before it is the previous report's):
+- the count, the median percent at plug-in, and how many reached 100 %
+  (one plugged in already full did not);
+- the median time to full, of charges whose full time is exact: not after
+  a sleep on the charger (F3's upper bound) and without a data gap;
+- 20 % → 100 % on this Mac's charge curve (F1, learned over the 30 days
+  before the range's end), shown only once the curve has learned a band
+  from 20 % up: before that it is the default curve, not this Mac's;
+- time left plugged in after full (sleep included, as F3): the median of
+  finished charges and the longest, the ongoing one so far included;
+- the last percent of each finished charge that never reached full, and
+  the not-charging time below full (F3's hold) summed, from 5 minutes.
+
+No charges: `no charges in this range`, and nothing else in the section.
+
+**5. Habits and health**
 - Median percent at plug-in and at unplug (the range's plug and unplug
   events; the mean of the middle two for an even count).
 - Share of **awake** time above 90 % and below 20 % (a sample's percent holds
   until the next sample); none with under 30 awake minutes, so a report run
   just after midnight raises no flag from three minutes of data.
-- Longest continuous stretch at 100 % on AC. Unlike every other duration,
-  this one runs through sleep between two samples that are both at 100 % on
+- Longest continuous stretch at 100 % on AC, in the JSON only (the human
+  output shows the charging section's time at full). Unlike every other
+  duration, this one runs through sleep between two samples that are both at 100 % on
   AC: a full battery left on the charger overnight is the habit it measures.
   A recorder restart in the gap breaks it, because nothing is known then.
 - Rule-based flags, exact thresholds:
@@ -80,9 +97,14 @@ avg 14.2 %/hr · worst 24.1 %/hr (0924-1405, Thu 24 Sep 14:05) — top app Docke
  1   Google Chrome   32%     ≈ 58% of battery
  …
 shares are of app energy (kernel counters); battery cost is an estimate
+── charging ──────────────────────────────────────
+9 charges · median start 23% · 7 reached full
+median time to full 1h 19m · 20% → 100% ≈ 1h 28m on this Mac
+left plugged in at full: median 1h 18m · longest 9h 10m
+stopped below full 2 (96%, 99%)
 ── habits & health ───────────────────────────────
 you typically plug in at 23% and unplug at 100%
-above 90% 80% of the time · below 20% 2% · longest at 100% on AC 9h 10m
+above 90% 80% of the time · below 20% 2%
 ⚠ battery spends 80% of time above 90% — consider Optimized Charging or unplugging earlier
 health 86.8% (−0.37 %/month)
 ```
@@ -107,6 +129,12 @@ JSON (one object; a value that cannot be computed is `null`):
   },
   "top_apps": [ /* F4 row objects, at most 5 */ ],
   "energy_since": null,
+  "charging": {
+    "charges": 9, "reached_full": 7, "start_median_pct": 23,
+    "minutes_to_full_median": 79, "curve_minutes_20_to_full": 88,
+    "minutes_at_full_median": 78, "max_minutes_at_full": 550,
+    "stopped_below_full_pct": [96, 99], "not_charging_minutes": 0
+  },
   "habits": {
     "completed_sessions": 9,
     "plug_in_median_pct": 23, "unplug_median_pct": 100,
@@ -124,6 +152,9 @@ JSON (one object; a value that cannot be computed is `null`):
   qualifying sessions; `effective_life_change_min` is `null` without a
   previous week to compare.
 - `energy_since` is F4's: when app energy recording began, if inside the range.
+- In `charging`, a median is `null` with nothing to take it of, and
+  `curve_minutes_20_to_full` is `null` until the curve has learned a band
+  from 20 % up.
 - Flag IDs are stable: `above_90`, `runs_low`, `pinned_100`.
 - `health` is `null` when the `health` table is empty.
 
@@ -134,6 +165,7 @@ JSON (one object; a value that cannot be computed is `null`):
 | < 2 completed sessions in range | Skip medians with `charging habits: not enough sessions yet (N)`, and effective life with `not enough sessions yet (N; needs 2 that …)`, N being the qualifying sessions; render the rest |
 | No app energy recorded | Top apps says `no app energy recorded yet`; the worst session has no top app |
 | No previous week | Omit the delta |
+| No charge started in range | Charging says `no charges in this range` |
 | No daemon data at all | Exit 1: `report needs daemon history — run 'batlog daemon install'` |
 | `health` table empty | Omit the health line |
 
@@ -144,3 +176,5 @@ JSON (one object; a value that cannot be computed is `null`):
 - [x] Weekly effective-battery-life matches a manual calculation on seeded
       sessions.
 - [x] `--json` schema is stable and documented here.
+- [x] Charging counts only charges that started in the range, and takes the
+      time-to-full median only of exact times (unit test on seeded sessions).
