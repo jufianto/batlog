@@ -85,7 +85,13 @@ These carry over from the PRD: the UI adds a view, not a new behaviour.
     neighbour within 90 s is a dark wake (Power Nap) and is drawn asleep,
     as F3 counts it.
   - The x axis marks hours for a day and weekdays for a week.
-  - Without colour, AC columns use `▓` instead of `█`.
+  - Without colour, AC columns use `▓` and asleep ones `░` instead of `█`.
+  - A legend line under the chart names the colours (or shades).
+  - **Cursor:** `←` `→` (`h` `l`; with Shift, ten columns) show a `▲` under
+    a column, starting at the newest data, and a readout line: the
+    column's time slice, its lowest percent, and on battery, on AC,
+    asleep or no data (`▲ Sat 03 Oct 15:51–16:05 · 79% · asleep`). It
+    hides when the view, the range or the detail changes.
 - **Totals line:** the same one `history` prints under its lists.
 - **List:** battery sessions and charge sessions together, newest first.
   - Charges are marked `⚡`.
@@ -97,10 +103,16 @@ These carry over from the PRD: the UI adds a view, not a new behaviour.
     full`, `charging · full in ~37m`). A row too long ends in `…`.
   - The same `(ongoing)` and `(data gap)` tags as F3.
 - **Enter on a battery session** opens its detail view: the session's
-  chart, zoomed to its own start and end, then `top --session <id>` as it
-  prints (its line, top apps with battery cost, heaviest 30 minutes).
+  chart, zoomed to its own start and end (with the cursor), its
+  milestones, then `top --session <id>` as it prints (its line, top apps
+  with battery cost, heaviest 30 minutes).
+- **Milestones:** when the session first reached each tenth on the way
+  down, or a charge on the way up, and how it ended: `99% yesterday 23:27
+  → 90% 01:30 → 80% 10:13 → … → plugged in 21:56 at 21%` (`unplugged … at
+  99%` for a charge, `now 56%` while ongoing). A time names its day only
+  when the day changes.
 - **Enter on a charge** opens its detail view:
-  - the charge's chart;
+  - the charge's chart and its milestones on the way up;
   - start → end percent;
   - time to full, or an upper bound;
   - time at 100 %, and any time not charging below full (F3);
@@ -155,6 +167,7 @@ These carry over from the PRD: the UI adds a view, not a new behaviour.
 |---|---|
 | `1`–`4`, `Tab`, `Shift-Tab` | switch views |
 | `↑` `↓` / `k` `j`, `PgUp` `PgDn`, `g` `G` | move the selection or scroll |
+| `←` `→` / `h` `l`, with Shift ×10 | move the Battery chart's cursor |
 | `Enter` | open the selected row's detail |
 | `Esc` | back out of a detail, or close help |
 | `t` `w` `[` `]` | change the range (see Ranges) |

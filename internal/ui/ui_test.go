@@ -319,3 +319,44 @@ func TestDetailsLoadOnce(t *testing.T) {
 		t.Errorf("calls = %v", f.calls)
 	}
 }
+
+func TestMilestones(t *testing.T) {
+	// The fixture's 23:10 session: 100 % at 23:10, 90 % at 01:00, plugged
+	// in at 01:00. Its 01:00 charge: 90 → 100 % by 01:59, unplugged 02:00.
+	ss := day()
+	got := strings.Join(milestones(ss, at(-50), at(60), false, false, noon), " → ")
+	if got != "100% yesterday 23:10 → 90% 00:59 → plugged in 01:00 at 90%" {
+		t.Errorf("session: %s", got)
+	}
+	got = strings.Join(milestones(ss, at(60), at(120), true, false, noon), " → ")
+	if got != "90% 01:00 → 100% 01:59 → unplugged 02:00 at 100%" {
+		t.Errorf("charge: %s", got)
+	}
+	got = strings.Join(milestones(ss, at(660), at(719), false, true, noon), " → ")
+	if got != "94% 11:00 → 90% 11:40 → now 88%" {
+		t.Errorf("ongoing: %s", got)
+	}
+	if w := wrapDots([]string{"aaaa", "bbbb", "cccc"}, 12); len(w) != 2 || w[0] != "aaaa → bbbb →" || w[1] != "cccc" {
+		t.Errorf("wrap = %q", w)
+	}
+}
+
+func TestChartCursor(t *testing.T) {
+	// The first ← shows the cursor at the newest data: the 11:59 sample
+	// holds into the column from 12:00 (94 columns for 24 h: 15.3 min each). Then
+	// ← moves a column and Shift-← ten, into the night's sleep.
+	got := snap(newFake(), false, 130, 40, "left")
+	if !strings.Contains(got, "▲ Sat 26 Sep 12:00–12:15 · 88% · on battery") {
+		t.Errorf("first press:\n%s", got)
+	}
+	got = snap(newFake(), false, 130, 40, "left", "shift+left", "left")
+	if !strings.Contains(got, "▲ Sat 26 Sep 09:11–09:26 · 95% · asleep") {
+		t.Errorf("eleven columns back:\n%s", got)
+	}
+	// Leaving the view or opening a row hides it.
+	for _, keys := range [][]string{{"left", "2", "1"}, {"left", "enter"}, {"left", "w"}} {
+		if got := snap(newFake(), false, 130, 40, keys...); strings.Contains(got, "▲ Sat") {
+			t.Errorf("%v: cursor still shown", keys)
+		}
+	}
+}

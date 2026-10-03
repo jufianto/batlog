@@ -147,27 +147,29 @@ func bar(v float64, rows int, full rune) []rune {
 }
 
 // pctChart draws battery percent over from..to: a 4-cell y axis, rows of
-// bars, the x axis and its labels; cols+4 wide, rows+2 tall. Without
-// colour, AC columns are ▓ and asleep ones ░ so the source still shows.
-func pctChart(cols, rows int, samples []store.Sample, runStarts []int64, from, to time.Time, st styles) []string {
-	cs := pctColumns(cols, samples, runStarts, from.Unix(), to.Unix())
+// bars, the x axis with the cursor's ▲, the time labels, a legend and the
+// cursor's readout; cols+4 wide, rows+4 tall. cursor is a column, or -1
+// for none. Without colour, AC columns are ▓ and asleep ones ░ so the
+// source still shows.
+func pctChart(cs []column, rows int, from, to time.Time, cursor int, st styles) []string {
+	cols := len(cs)
 	grid := make([][]string, rows)
 	for r := range grid {
 		grid[r] = make([]string, cols)
 	}
 	for c, col := range cs {
-		full := '█'
-		paint := func(s string) string { return s }
+		full, style := '█', st.bat
 		switch col.kind {
 		case onAC:
-			full = '▓'
-			paint = func(s string) string { return st.paint(st.ac, s) }
+			full, style = '▓', st.ac
 		case asleep:
-			full = '░'
-			paint = func(s string) string { return st.paint(st.sleep, s) }
+			full, style = '░', st.sleep
 		}
 		if st.color {
 			full = '█'
+		}
+		if c == cursor {
+			style = st.cursor
 		}
 		var cells []rune
 		if col.kind == none {
@@ -176,10 +178,10 @@ func pctChart(cols, rows int, samples []store.Sample, runStarts []int64, from, t
 			cells = bar(float64(col.pct)/100, rows, full)
 		}
 		for r := range rows {
-			grid[r][c] = paint(string(cells[r]))
+			grid[r][c] = st.paint(style, string(cells[r]))
 		}
 	}
-	out := make([]string, 0, rows+2)
+	out := make([]string, 0, rows+4)
 	for r := range rows {
 		label := "   "
 		switch {
@@ -192,8 +194,49 @@ func pctChart(cols, rows int, samples []store.Sample, runStarts []int64, from, t
 		}
 		out = append(out, label+"│"+strings.Join(grid[r], ""))
 	}
-	out = append(out, "   └"+strings.Repeat("─", cols))
-	return append(out, "    "+timeLabels(cols, from, to))
+	axis := []rune(strings.Repeat("─", cols))
+	if cursor >= 0 && cursor < cols {
+		axis[cursor] = '▲'
+	}
+	out = append(out, "   └"+string(axis), "    "+timeLabels(cols, from, to))
+	return append(out, legend(st), readout(cs, from, to, cursor, st))
+}
+
+// legend names the chart's colours, or its shades without colour.
+func legend(st styles) string {
+	if !st.color {
+		return "█ on battery  ▓ on AC  ░ asleep  blank: no data · ← → read a time"
+	}
+	return st.paint(st.bat, "█") + " on battery  " + st.paint(st.ac, "█") + " on AC  " +
+		st.paint(st.sleep, "█") + " asleep  blank: no data · ← → read a time"
+}
+
+// readout says what the cursor's column holds: when, the percent, and
+// whether the Mac was on battery, on AC or asleep.
+func readout(cs []column, from, to time.Time, cursor int, st styles) string {
+	if cursor < 0 || cursor >= len(cs) {
+		return ""
+	}
+	span := to.Sub(from)
+	a := from.Add(time.Duration(float64(span) * float64(cursor) / float64(len(cs))))
+	b := from.Add(time.Duration(float64(span) * float64(cursor+1) / float64(len(cs))))
+	when := a.Format("Mon 02 Jan 15:04") + "–" + b.Format("15:04")
+	col := cs[cursor]
+	what := map[kind]string{none: "no data", battery: "%d%% · on battery", onAC: "%d%% · on AC", asleep: "%d%% · asleep"}[col.kind]
+	if col.kind != none {
+		what = fmt.Sprintf(what, col.pct)
+	}
+	return st.paint(st.title, "▲ "+when+" · "+what)
+}
+
+// lastData is the rightmost column with data, or the last one.
+func lastData(cs []column) int {
+	for c := len(cs) - 1; c >= 0; c-- {
+		if cs[c].kind != none {
+			return c
+		}
+	}
+	return len(cs) - 1
 }
 
 // valueChart draws bars of vals (one per column, NaN for none) scaled from

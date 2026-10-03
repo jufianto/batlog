@@ -9,11 +9,13 @@
 │                            ││  0│                                                                       ███░░░██     │
 │ ▸ 1 Battery                ││   └────────────────────────────────────────────────────────────────────────────────────│
 │   2 Apps                   ││    Sun         Mon         Tue         Wed         Thu         Fri         Sat         │
-│   3 Report                 ││on battery 3h 48m · on AC 1h 10m · asleep 8h 01m                                        │
+│   3 Report                 ││█ on battery  ▓ on AC  ░ asleep  blank: no data · ← → read a time                       │
 │   4 Health                 ││                                                                                        │
-│                            ││  ID            BATTERY  LENGTH  RESULT                                                 │
-│ range last 7 days          ││▸ 0926-0200     100→88%  1h 58m  5.6 %/hr  (ongoing)                                    │
-│ data  just now             ││  0926-0100  ⚡ 90→100%  1h 00m  full in 59m · 1m at 100%                               │
+│                            ││on battery 3h 48m · on AC 1h 10m · asleep 8h 01m                                        │
+│ range last 7 days          ││                                                                                        │
+│ data  just now             ││  ID            BATTERY  LENGTH  RESULT                                                 │
+│                            ││▸ 0926-0200     100→88%  1h 58m  5.6 %/hr  (ongoing)                                    │
+│                            ││  0926-0100  ⚡ 90→100%  1h 00m  full in 59m · 1m at 100%                               │
 │                            ││  0925-2310     100→90%  1h 50m  5.5 %/hr                                               │
 │                            ││                                                                                        │
 │                            ││                                                                                        │
@@ -34,7 +36,5 @@
 │                            ││                                                                                        │
 │                            ││                                                                                        │
 │                            ││                                                                                        │
-│                            ││                                                                                        │
-│                            ││                                                                                        │
 └────────────────────────────┘└────────────────────────────────────────────────────────────────────────────────────────┘
- 1-4 view · ↑↓ select · enter open · t today · w week · [ ] earlier/later · r refresh · ? help · q quit                 
+ 1-4 view · ↑↓ select · ← → read the chart · enter open · t today · w week · [ ] earlier/later · ? help · q quit        

@@ -8,17 +8,17 @@
 │ condition Normal           ││  0│█████░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░█████│
 │                            ││   └────────────────────────────────────────────│
 │ ▸ 1 Battery                ││    02:00   04:00    06:00    08:00    10:00    │
-│   2 Apps                   ││                                                │
-│   3 Report                 ││⚡ session 0926-0200 · 02:00 → 03:00 · 59m awak…│
-│   4 Health                 ││ #   APP             SHARE   BATTERY COST       │
-│                            ││ 1   Brave Browser   60%     ≈ 3% of battery    │
-│ range today                ││                                                │
-│ data  just now             ││                                                │
+│   2 Apps                   ││█ on battery  ▓ on AC  ░ asleep  blank: no data…│
+│   3 Report                 ││                                                │
+│   4 Health                 ││100% 02:00 → 90% 11:40 → now 88%                │
 │                            ││                                                │
+│ range today                ││⚡ session 0926-0200 · 02:00 → 03:00 · 59m awak…│
+│ data  just now             ││ #   APP             SHARE   BATTERY COST       │
+│                            ││ 1   Brave Browser   60%     ≈ 3% of battery    │
 │                            ││                                                │
 │                            ││                                                │
 │                            ││                                                │
 │                            ││                                                │
 │                            ││                                                │
 └────────────────────────────┘└────────────────────────────────────────────────┘
- esc back · 1-4 view · t today · w week · [ ] earlier/later · r refresh · q quit
+ esc back · ← → read the chart · 1-4 view · t today · w week · [ ] earlier/late…

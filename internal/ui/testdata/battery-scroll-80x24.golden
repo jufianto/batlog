@@ -8,17 +8,17 @@
 │ condition Normal           ││  0│██▓▓██░░░░░░░░░░░░░░███                     │
 │                            ││   └────────────────────────────────────────────│
 │ ▸ 1 Battery                ││    00:00  04:00  08:00   12:00  16:00  20:00   │
-│   2 Apps                   ││on battery 2h 58m · on AC 1h 00m · asleep 8h 01m│
+│   2 Apps                   ││█ on battery  ▓ on AC  ░ asleep  blank: no data…│
 │   3 Report                 ││                                                │
-│   4 Health                 ││  ID            BATTERY  RESULT                 │
-│                            ││  0926-0200     100→88%  5.6 %/hr  (ongoing)    │
-│ range today                ││  0926-0100  ⚡ 90→100%  full in 59m · 1m at 10…│
-│ data  just now             ││▸ 0925-2310     100→90%  5.5 %/hr               │
+│   4 Health                 ││on battery 2h 58m · on AC 1h 00m · asleep 8h 01m│
 │                            ││                                                │
-│                            ││                                                │
+│ range today                ││  ID            BATTERY  RESULT                 │
+│ data  just now             ││  0926-0200     100→88%  5.6 %/hr  (ongoing)    │
+│                            ││  0926-0100  ⚡ 90→100%  full in 59m · 1m at 10…│
+│                            ││▸ 0925-2310     100→90%  5.5 %/hr               │
 │                            ││                                                │
 │                            ││                                                │
 │                            ││                                                │
 │                            ││                                                │
 └────────────────────────────┘└────────────────────────────────────────────────┘
- 1-4 view · ↑↓ select · enter open · t today · w week · [ ] earlier/later · r r…
+ 1-4 view · ↑↓ select · ← → read the chart · enter open · t today · w week · [ …

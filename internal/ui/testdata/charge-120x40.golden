@@ -9,13 +9,13 @@
 │                            ││  0│▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓│
 │ ▸ 1 Battery                ││   └────────────────────────────────────────────────────────────────────────────────────│
 │   2 Apps                   ││    01:00                                                                               │
-│   3 Report                 ││                                                                                        │
-│   4 Health                 ││charge 0926-0100 · 01:00 → 02:00 · 90% → 100%                                           │
+│   3 Report                 ││█ on battery  ▓ on AC  ░ asleep  blank: no data · ← → read a time                       │
+│   4 Health                 ││                                                                                        │
+│                            ││90% 01:00 → 100% 01:59 → unplugged 02:00 at 100%                                        │
+│ range today                ││                                                                                        │
+│ data  just now             ││charge 0926-0100 · 01:00 → 02:00 · 90% → 100%                                           │
 │                            ││full in 59m                                                                             │
-│ range today                ││1m at 100%                                                                              │
-│ data  just now             ││                                                                                        │
-│                            ││                                                                                        │
-│                            ││                                                                                        │
+│                            ││1m at 100%                                                                              │
 │                            ││                                                                                        │
 │                            ││                                                                                        │
 │                            ││                                                                                        │
@@ -37,4 +37,4 @@
 │                            ││                                                                                        │
 │                            ││                                                                                        │
 └────────────────────────────┘└────────────────────────────────────────────────────────────────────────────────────────┘
- esc back · 1-4 view · t today · w week · [ ] earlier/later · r refresh · q quit                                        
+ esc back · ← → read the chart · 1-4 view · t today · w week · [ ] earlier/later · q quit                               
