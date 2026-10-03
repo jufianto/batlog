@@ -53,6 +53,9 @@ func TestChargeFullAfterASleepIsAnUpperBound(t *testing.T) {
 	)}
 	c := chargesOf(t, in)[0]
 	// The sleep counts on the charger: 30 min at full after waking.
+	if c.MaxPct != 100 || c.MaxAt != at(200) || !c.MaxUpperBound {
+		t.Errorf("max %d at %d bound %v; want 100 at the wake, an upper bound", c.MaxPct, c.MaxAt, c.MaxUpperBound)
+	}
 	if c.FullAt != at(200) || !c.FullUpperBound || c.AtFullMin != 30 {
 		t.Errorf("full at %d bound %v at full %d; want %d true 30", c.FullAt, c.FullUpperBound, c.AtFullMin, at(200))
 	}
@@ -70,6 +73,10 @@ func TestChargeHeldBelowFull(t *testing.T) {
 	c := chargesOf(t, in)[0]
 	if c.FullAt != 0 || c.HoldMin != 45 || c.HoldPct != 80 || c.EndPct != 80 || c.Ongoing {
 		t.Errorf("session = %+v; want no full, held 45 min at 80%%", c)
+	}
+	// 80 % first at 00:49, after 39 min on the charger.
+	if c.MaxPct != 80 || c.MaxAt != at(49) || c.MaxUpperBound {
+		t.Errorf("max %d at %d bound %v; want 80 at %d", c.MaxPct, c.MaxAt, c.MaxUpperBound, at(49))
 	}
 }
 

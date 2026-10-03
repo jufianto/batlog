@@ -194,7 +194,7 @@ type Charging struct {
 	// charges; MaxAtFull counts the ongoing one so far too.
 	AtFullMedian *int
 	MaxAtFull    int
-	StoppedBelow []int // the last percent of finished charges that never got to full
+	StoppedBelow []int // the highest percent of finished charges that never got to full
 	// NotChargingMin is the time on AC not charging below full before it
 	// (F3's hold), summed.
 	NotChargingMin int
@@ -217,7 +217,7 @@ func BuildCharging(cs []history.ChargeSession, from int64) Charging {
 		c.NotChargingMin += s.HoldMin
 		if s.FullAt == 0 {
 			if !s.Ongoing {
-				c.StoppedBelow = append(c.StoppedBelow, s.EndPct)
+				c.StoppedBelow = append(c.StoppedBelow, s.MaxPct)
 			}
 			continue
 		}

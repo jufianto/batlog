@@ -87,6 +87,12 @@ type ChargeSession struct {
 	// most FullAt - Start.
 	FullAt         int64
 	FullUpperBound bool
+	// MaxPct is the highest percent on the charger and MaxAt the first
+	// sample at it, so a charge unplugged before full still says how long
+	// it took to get as far as it did; MaxUpperBound as FullUpperBound.
+	MaxPct        int
+	MaxAt         int64
+	MaxUpperBound bool
 	// AtFullMin is the time from FullAt to the unplug (or now), sleep on
 	// the charger included: a full battery left plugged in overnight is
 	// the habit it measures.
@@ -357,10 +363,14 @@ func charges(in Input, from, to int64) []ChargeSession {
 			continue
 		}
 		cur.EndPct, cur.Charging = s.Pct, s.Charging
+		// Woke to a higher percent than before the sleep: it got there at
+		// some point while asleep.
+		woke := s.TS > cur.Start && s.TS-ss[i-1].TS > sleepGap && ss[i-1].Pct < s.Pct
+		if s.Pct > cur.MaxPct || cur.MaxAt == 0 {
+			cur.MaxPct, cur.MaxAt, cur.MaxUpperBound = s.Pct, s.TS, woke
+		}
 		if s.Pct >= 100 && cur.FullAt == 0 {
-			cur.FullAt = s.TS
-			// Woke to a full battery that was not full before the sleep.
-			cur.FullUpperBound = s.TS > cur.Start && s.TS-ss[i-1].TS > sleepGap && ss[i-1].Pct < 100
+			cur.FullAt, cur.FullUpperBound = s.TS, woke
 		}
 		if i+1 == len(ss) {
 			break

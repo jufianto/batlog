@@ -52,7 +52,7 @@ for battery sessions, one that began before it is the previous report's):
   from 20 % up: before that it is the default curve, not this Mac's;
 - time left plugged in after full (sleep included, as F3): the median of
   finished charges and the longest, the ongoing one so far included;
-- the last percent of each finished charge that never reached full, and
+- the highest percent of each finished charge that never reached full, and
   the not-charging time below full (F3's hold) summed, from 5 minutes.
 
 No charges: `no charges in this range`, and nothing else in the section.
@@ -81,27 +81,32 @@ No charges: `no charges in this range`, and nothing else in the section.
 
 ## Output
 
-Human, `--weekly`, abridged:
+Human, `--weekly`, abridged (a blank line goes before each section):
 ```
 📊 batlog report · 20 Sep – 26 Sep
+
 ── battery life ──────────────────────────────────
 on battery 31h 40m · on AC 23h 12m · asleep 100h 52m
 longest session 6h 17m (0922-0926)
   0922-0926   Tue 22 Sep 09:26 → Tue 22 Sep 23:21   6h 17m awake   100% → 22%   11.9 %/hr
   …
 est. full-charge life 5h 18m (▼ 22m vs last week)
+
 ── drain ─────────────────────────────────────────
 avg 14.2 %/hr · worst 24.1 %/hr (0924-1405, Thu 24 Sep 14:05) — top app Docker (41%)
+
 ── top apps ──────────────────────────────────────
  #   APP             SHARE   BATTERY COST
  1   Google Chrome   32%     ≈ 58% of battery
  …
 shares are of app energy (kernel counters); battery cost is an estimate
+
 ── charging ──────────────────────────────────────
 9 charges · median start 23% · 7 reached full
 median time to full 1h 19m · 20% → 100% ≈ 1h 28m on this Mac
 left plugged in at full: median 1h 18m · longest 9h 10m
 stopped below full 2 (96%, 99%)
+
 ── habits & health ───────────────────────────────
 you typically plug in at 23% and unplug at 100%
 above 90% 80% of the time · below 20% 2%

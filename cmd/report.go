@@ -354,8 +354,9 @@ func renderCharging(w io.Writer, c report.Charging, curveMin *int) {
 	}
 }
 
-// section prints a rule with a title, 50 columns wide.
+// section prints a blank line, then a rule with a title, 50 columns wide.
 func section(w io.Writer, title string) {
+	fmt.Fprintln(w)
 	fmt.Fprintln(w, "── "+title+" "+strings.Repeat("─", max(0, 50-4-len([]rune(title)))))
 }
 

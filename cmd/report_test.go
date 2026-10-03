@@ -37,28 +37,28 @@ func TestReportDailyHuman(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := "📊 batlog report · today, Sat 26 Sep\n" +
-		"── battery life ──────────────────────────────────\n" +
+		"\n── battery life ──────────────────────────────────\n" +
 		"on battery 2h 58m · on AC 1h 00m · asleep 8h 01m\n" +
 		"longest session 1h 58m (0926-0200, ongoing)\n" +
 		"  0925-2310   yesterday 23:10 → 01:00   1h 50m awake    100% → 90%   5.5 %/hr\n" +
 		"  0926-0200   02:00 → now               1h 58m so far   100% → 88%   5.6 %/hr   (ongoing)\n" +
-		"── drain ─────────────────────────────────────────\n" +
+		"\n── drain ─────────────────────────────────────────\n" +
 		"avg 5.7 %/hr · worst 5.6 %/hr (0926-0200, 02:00) — top app Brave Browser (75%)\n" +
-		"── top apps ──────────────────────────────────────\n" +
+		"\n── top apps ──────────────────────────────────────\n" +
 		" #   APP              SHARE   BATTERY COST\n" +
 		" 1   Brave Browser    50%     ≈ 8% of battery\n" +
 		" 2   Xcode            33%     ≈ 0%\n" +
 		" 3   WindowServer ⚙   17%     ≈ 3%\n" +
 		"app energy from about 01:00 only, when recording started; battery cost covers the 11% used since\n" +
 		topFootnote + "\n" +
-		"── charging ──────────────────────────────────────\n" +
+		"\n── charging ──────────────────────────────────────\n" +
 		// 90 → 100 % from 01:00, full at 01:59, unplugged at 02:00. The
 		// curve learned the 90s from it (10 % in 59 min); the rest is the
 		// default: 61 min from 20 to 90 %.
 		"1 charge · median start 90% · 1 reached full\n" +
 		"median time to full 59m · 20% → 100% ≈ 2h 00m on this Mac\n" +
 		"left plugged in at full: median 1m · longest 1m\n" +
-		"── habits & health ───────────────────────────────\n" +
+		"\n── habits & health ───────────────────────────────\n" +
 		// 0925-2310 began yesterday: it is listed, but yesterday's to judge.
 		"charging habits: not enough sessions yet (0)\n" +
 		"above 90% 89% of the time · below 20% 0%\n" +
@@ -165,7 +165,7 @@ func TestReportWeeklyEffectiveLife(t *testing.T) {
 		// This week's plug-ins at 80 % and 85 %: the first slept on the
 		// charger and woke full (no exact time to full) for 10 minutes; the
 		// second is still on the charger.
-		"── charging ──────────────────────────────────────\n2 charges · median start 82.5% · 1 reached full\nleft plugged in at full: median 10m · longest 10m\n── habits",
+		"── charging ──────────────────────────────────────\n2 charges · median start 82.5% · 1 reached full\nleft plugged in at full: median 10m · longest 10m\n\n── habits",
 		"── top apps ──────────────────────────────────────\nno app energy recorded yet\n",
 	} {
 		if !strings.Contains(got, want) {
