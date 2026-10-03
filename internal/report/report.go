@@ -179,6 +179,72 @@ func BuildHabits(r history.Result, samples []store.Sample, runStarts []int64, fr
 	return h
 }
 
+// Charging is how the charges that started in the range went (F3's charge
+// sessions).
+type Charging struct {
+	Charges int
+	// ReachedFull counts the charges that got to 100 %; one plugged in
+	// already full is not among them.
+	ReachedFull int
+	StartMedian *float64 // the percent at plug-in
+	// ToFullMedian is of the charges with an exact time to full: not after
+	// a sleep on the charger (an upper bound) and without a data gap.
+	ToFullMedian *int
+	// AtFullMedian is the time left plugged in after full, of finished
+	// charges; MaxAtFull counts the ongoing one so far too.
+	AtFullMedian *int
+	MaxAtFull    int
+	StoppedBelow []int // the last percent of finished charges that never got to full
+	// NotChargingMin is the time on AC not charging below full before it
+	// (F3's hold), summed.
+	NotChargingMin int
+}
+
+// BuildCharging reads the charge sessions that started at or after from:
+// one that began before the range is the previous report's, as for
+// battery sessions.
+func BuildCharging(cs []history.ChargeSession, from int64) Charging {
+	var (
+		c                     Charging
+		start, toFull, atFull []float64
+	)
+	for _, s := range cs {
+		if s.Start < from {
+			continue
+		}
+		c.Charges++
+		start = append(start, float64(s.StartPct))
+		c.NotChargingMin += s.HoldMin
+		if s.FullAt == 0 {
+			if !s.Ongoing {
+				c.StoppedBelow = append(c.StoppedBelow, s.EndPct)
+			}
+			continue
+		}
+		if s.FullAt > s.Start {
+			c.ReachedFull++
+			if !s.FullUpperBound && !s.DataGap {
+				toFull = append(toFull, float64(s.FullAt-s.Start)/60)
+			}
+		}
+		c.MaxAtFull = max(c.MaxAtFull, s.AtFullMin)
+		if !s.Ongoing {
+			atFull = append(atFull, float64(s.AtFullMin))
+		}
+	}
+	c.StartMedian = median(start)
+	c.ToFullMedian, c.AtFullMedian = roundMin(median(toFull)), roundMin(median(atFull))
+	return c
+}
+
+func roundMin(v *float64) *int {
+	if v == nil {
+		return nil
+	}
+	m := int(math.Round(*v))
+	return &m
+}
+
 // Flag is one rule-based warning.
 type Flag struct {
 	ID      string

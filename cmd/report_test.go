@@ -51,6 +51,13 @@ func TestReportDailyHuman(t *testing.T) {
 		" 3   WindowServer ⚙   17%     ≈ 3%\n" +
 		"app energy from about 01:00 only, when recording started; battery cost covers the 11% used since\n" +
 		topFootnote + "\n" +
+		"── charging ──────────────────────────────────────\n" +
+		// 90 → 100 % from 01:00, full at 01:59, unplugged at 02:00. The
+		// curve learned the 90s from it (10 % in 59 min); the rest is the
+		// default: 61 min from 20 to 90 %.
+		"1 charge · median start 90% · 1 reached full\n" +
+		"median time to full 59m · 20% → 100% ≈ 2h 00m on this Mac\n" +
+		"left plugged in at full: median 1m · longest 1m\n" +
 		"── habits & health ───────────────────────────────\n" +
 		// 0925-2310 began yesterday: it is listed, but yesterday's to judge.
 		"charging habits: not enough sessions yet (0)\n" +
@@ -73,7 +80,7 @@ func TestReportJSON(t *testing.T) {
 	if err := json.Unmarshal([]byte(out), &j); err != nil {
 		t.Fatalf("%v in %s", err, out)
 	}
-	for _, k := range []string{"range", "kind", "battery", "drain", "top_apps", "energy_since", "habits", "health"} {
+	for _, k := range []string{"range", "kind", "battery", "drain", "top_apps", "energy_since", "charging", "habits", "health"} {
 		if _, ok := j[k]; !ok {
 			t.Errorf("missing %q in %s", k, out)
 		}
@@ -85,6 +92,7 @@ func TestReportJSON(t *testing.T) {
 		`"plug_in_median_pct":null`,
 		`"flags":[{"id":"above_90",`,
 		`"health":null`,
+		`"charging":{"charges":1,"reached_full":1,"start_median_pct":90,"minutes_to_full_median":59,"curve_minutes_20_to_full":120,"minutes_at_full_median":1,"max_minutes_at_full":1,"stopped_below_full_pct":[],"not_charging_minutes":0}`,
 	} {
 		if !strings.Contains(out, want) {
 			t.Errorf("json lacks %s:\n%s", want, out)
@@ -154,6 +162,10 @@ func TestReportWeeklyEffectiveLife(t *testing.T) {
 		"📊 batlog report · 20 Sep – 26 Sep\n",
 		"est. full-charge life 8h 20m (▼ 50m vs last week)\n",
 		"you typically plug in at 82.5% and unplug at 100%\n",
+		// This week's plug-ins at 80 % and 85 %: the first slept on the
+		// charger and woke full (no exact time to full) for 10 minutes; the
+		// second is still on the charger.
+		"── charging ──────────────────────────────────────\n2 charges · median start 82.5% · 1 reached full\nleft plugged in at full: median 10m · longest 10m\n── habits",
 		"── top apps ──────────────────────────────────────\nno app energy recorded yet\n",
 	} {
 		if !strings.Contains(got, want) {

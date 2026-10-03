@@ -181,3 +181,39 @@ func TestHabits(t *testing.T) {
 		t.Errorf("completed from 3601 = %d, want 0", h.Completed)
 	}
 }
+
+func TestCharging(t *testing.T) {
+	const m = 60
+	cs := []history.ChargeSession{
+		// Began before the range: the previous report's.
+		{Start: -100 * m, StartPct: 10, FullAt: -10 * m, AtFullMin: 500},
+		// 20 → 100 in 90 min, left on 60 min at full.
+		{Start: 0, StartPct: 20, EndPct: 100, FullAt: 90 * m, AtFullMin: 60},
+		// 30 → 100 in 70 min, 120 min at full, 20 min held at 80 % first.
+		{Start: 300 * m, StartPct: 30, EndPct: 100, FullAt: 370 * m, AtFullMin: 120, HoldMin: 20},
+		// Woke on the charger full: an upper bound, not a time to full.
+		{Start: 600 * m, StartPct: 40, EndPct: 100, FullAt: 900 * m, FullUpperBound: true, AtFullMin: 10},
+		// Unplugged at 96 %.
+		{Start: 1000 * m, StartPct: 50, EndPct: 96},
+		// Plugged in full: at full, but not reached.
+		{Start: 1100 * m, StartPct: 100, EndPct: 100, FullAt: 1100 * m, AtFullMin: 30},
+		// Ongoing and full for 600 min so far: the longest, not in the median.
+		{Start: 1200 * m, StartPct: 60, EndPct: 100, FullAt: 1250 * m, AtFullMin: 600, Ongoing: true},
+	}
+	c := BuildCharging(cs, 0)
+	if c.Charges != 6 || c.ReachedFull != 4 || c.MaxAtFull != 600 || c.NotChargingMin != 20 {
+		t.Errorf("charging = %+v", c)
+	}
+	// Starts 20 30 40 50 100 60 → 45; exact times to full 90 70 50 → 70;
+	// finished at full 60 120 10 30 → 45.
+	if *c.StartMedian != 45 || *c.ToFullMedian != 70 || *c.AtFullMedian != 45 {
+		t.Errorf("medians: start %v, to full %v, at full %v", *c.StartMedian, *c.ToFullMedian, *c.AtFullMedian)
+	}
+	if len(c.StoppedBelow) != 1 || c.StoppedBelow[0] != 96 {
+		t.Errorf("stopped below = %v", c.StoppedBelow)
+	}
+
+	if e := BuildCharging(cs[:1], 0); e.Charges != 0 || e.StartMedian != nil || e.ToFullMedian != nil || e.AtFullMedian != nil {
+		t.Errorf("only an earlier charge: %+v", e)
+	}
+}

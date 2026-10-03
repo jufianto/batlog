@@ -63,6 +63,39 @@ Or build from a clone: `CGO_ENABLED=0 go build .`
 records one sample a minute. Remove it with `batlog daemon uninstall`; your
 data is kept.
 
+### Shell completion
+
+Homebrew installs tab completion for zsh, bash and fish. Open a new terminal
+and try `batlog hi<Tab>`.
+
+**zsh with oh-my-zsh (or another framework):** if Tab does nothing, Homebrew's
+completion folder is not on `FPATH` when the framework runs `compinit`. Add
+this line to `~/.zshrc` **before** `source $ZSH/oh-my-zsh.sh`:
+
+```sh
+FPATH="$(brew --prefix)/share/zsh/site-functions:${FPATH}"
+```
+
+Then open a new terminal. `echo $_comps[batlog]` should print `_batlog`.
+
+**Plain zsh:** make sure `~/.zshrc` runs `autoload -Uz compinit && compinit`
+after setting the `FPATH` above.
+
+**bash:** needs `brew install bash-completion@2` and its line in
+`~/.bash_profile` (`brew info bash-completion@2` prints it).
+
+**Without Homebrew,** write the script yourself:
+
+```sh
+# zsh: then add  fpath=(~/.zsh/completions $fpath)  to ~/.zshrc, before compinit
+mkdir -p ~/.zsh/completions && batlog completion zsh > ~/.zsh/completions/_batlog
+# bash (with bash-completion 2)
+mkdir -p ~/.local/share/bash-completion/completions
+batlog completion bash > ~/.local/share/bash-completion/completions/batlog
+# fish
+batlog completion fish > ~/.config/fish/completions/batlog.fish
+```
+
 ## Commands
 
 | Command | Answers |
@@ -72,7 +105,7 @@ data is kept.
 | `batlog history [--today\|--week\|--since 3d]` | first charge, last unplug, each battery session with its ID and drain, and each charge: time to full and how long it then sat at 100% |
 | `batlog top [--today\|--week\|--since 12h\|--session <id\|last>\|--live]` | which apps used the most energy, and roughly what each cost the battery |
 | `batlog daemon install\|status\|logs\|uninstall` | the background recorder |
-| `batlog report [--daily\|--weekly\|--since 3d]` | a digest: battery life, worst drain, top 5 apps, charging habits with warnings, health |
+| `batlog report [--daily\|--weekly\|--since 3d]` | a digest: battery life, worst drain, top 5 apps, your charges (time to full, time left at 100%), charging habits with warnings, health |
 | `batlog export samples\|apps\|health [--since 30d] [--json] [-o file]` | your raw data as CSV (the default) or JSON, for your own charts |
 
 Every command takes `--json`. Exit codes: 0 success (including "no data yet"),
