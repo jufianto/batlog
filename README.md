@@ -107,6 +107,7 @@ batlog completion fish > ~/.config/fish/completions/batlog.fish
 | `batlog daemon install\|status\|logs\|uninstall` | the background recorder |
 | `batlog report [--daily\|--weekly\|--since 3d]` | a digest: battery life, worst drain, top 5 apps, your charges (time to full, time left at 100%), charging habits with warnings, health |
 | `batlog export samples\|apps\|health [--since 30d] [--json] [-o file]` | your raw data as CSV (the default) or JSON, for your own charts |
+| `batlog ui` | all of it in one full-screen view: status, a battery chart with your sessions and charges, apps, the report and health |
 
 Every command takes `--json`. Exit codes: 0 success (including "no data yet"),
 1 operational error, 2 usage error.
@@ -117,6 +118,25 @@ A typical workflow when a charge drained too fast:
 batlog history --week          # find the session, e.g. 0926-1656
 batlog top --session 0926-1656 # which apps drained it, and its heaviest 30 minutes
 ```
+
+### `batlog ui`
+
+A full-screen view in the terminal, for when you would rather look around
+than run five commands. The sidebar keeps the live status and health in
+view; the main area has four views:
+
+1. **Battery:** battery % over today or the week (green on AC, dim asleep),
+   and every battery session and charge. Enter on one shows its chart and
+   top apps, or a charge's time to full and time at 100%.
+2. **Apps:** which apps used the most energy and what each cost the
+   battery. Enter on one shows its energy by hour or day.
+3. **Report:** the daily or weekly report.
+4. **Health:** health now and per day since recording began.
+
+Keys: `1`–`4` switch views, `↑↓` select, `enter`/`esc` open and close,
+`t`/`w` today or the last 7 days, `[` `]` the day or week before or after,
+`?` help, `q` quit. It refreshes every minute and only reads: it never
+writes to your data. It needs a window of at least 80×24.
 
 ### Reading `top`
 

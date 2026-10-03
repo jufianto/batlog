@@ -1,0 +1,24 @@
+┌ batlog ────────────────────┐┌ 2 Apps · Brave Browser ────────────────────────┐
+│ 88% · on battery · 5.0 W   │││           █                                   │
+│ drain 5.6 %/hr             │││           █                                   │
+│ left 15h 40m · macOS 15h 0…│││           █                                   │
+│ top Brave Browser (75%)    │││█          █                                   │
+│                            │││█          █                                   │
+│ health 90.0% · 396 cycles  │││█          █                                   │
+│ condition Normal           │││█          █                                   │
+│                            │││█          █                                   │
+│   1 Battery                │││█          █                                   │
+│ ▸ 2 Apps                   ││└────────────────────────                       │
+│   3 Report                 ││ 00:00       12:00                              │
+│   4 Health                 ││                                                │
+│                            ││Brave Browser · 50% of app energy · ≈ 8% of bat…│
+│ range today                ││busiest 11:00–12:00: 60% of its energy in the r…│
+│ data  just now             ││                                                │
+│                            ││                                                │
+│                            ││                                                │
+│                            ││                                                │
+│                            ││                                                │
+│                            ││                                                │
+│                            ││                                                │
+└────────────────────────────┘└────────────────────────────────────────────────┘
+ esc back · 1-4 view · t today · w week · [ ] earlier/later · r refresh · q quit
