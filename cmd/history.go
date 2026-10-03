@@ -324,7 +324,15 @@ func renderCharges(w io.Writer, cs []history.ChargeSession, t time.Time, curve *
 			}
 			parts = append(parts, "full in "+bound+fmtDuration(int((c.FullAt-c.Start)/60)))
 		case !c.Ongoing:
-			parts = append(parts, "unplugged before full")
+			p := "unplugged before full"
+			if c.MaxPct > c.StartPct {
+				bound := ""
+				if c.MaxUpperBound {
+					bound = "≤ "
+				}
+				p = fmt.Sprintf("%d%% in %s%s · %s", c.MaxPct, bound, fmtDuration(int((c.MaxAt-c.Start)/60)), p)
+			}
+			parts = append(parts, p)
 		case c.Charging:
 			p := "charging"
 			if m := estToFull(c, curve); m != nil {
@@ -506,6 +514,9 @@ type chargeJSON struct {
 	FullAt             *int64 `json:"full_at"`
 	MinutesToFull      *int   `json:"minutes_to_full"`
 	FullIsUpperBound   bool   `json:"full_is_upper_bound"`
+	MaxPct             int    `json:"max_pct"`
+	MinutesToMaxPct    int    `json:"minutes_to_max_pct"`
+	MaxIsUpperBound    bool   `json:"max_is_upper_bound"`
 	MinutesAtFull      *int   `json:"minutes_at_full"`
 	NotChargingMinutes int    `json:"not_charging_minutes"`
 	NotChargingPct     *int   `json:"not_charging_pct"`
@@ -528,6 +539,7 @@ type historyJSON struct {
 
 func toChargeJSON(c history.ChargeSession, curve *charge.Curve) chargeJSON {
 	j := chargeJSON{ID: c.ID, Start: c.Start, StartPct: c.StartPct, EndPct: c.EndPct, FullIsUpperBound: c.FullUpperBound,
+		MaxPct: c.MaxPct, MinutesToMaxPct: int((c.MaxAt - c.Start) / 60), MaxIsUpperBound: c.MaxUpperBound,
 		NotChargingMinutes: c.HoldMin, EstMinutesToFull: estToFull(c, curve), Charging: c.Charging && c.Ongoing,
 		Ongoing: c.Ongoing, DataGap: c.DataGap}
 	if !c.Ongoing {

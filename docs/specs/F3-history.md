@@ -28,6 +28,9 @@ Default range `--today`. `--since` accepts `3d`, `12h` or `2026-06-01`.
      wall-clock time: a Mac charges while asleep. When that sample is the
      first after a sleep that began below 100 %, the battery may have been
      full for a while, so the time is an upper bound (`full in ≤ 1h 21m`).
+   - A charge unplugged before full says how far it got and how long that
+     took: `96% in 1h 03m · unplugged before full`, timed to the first
+     sample at its highest percent (`≤` after a sleep, as above).
    - *At 100 %* is from that sample to the unplug (or now), sleep on the
      charger included, as F6's "pinned at 100 %" rule: a full battery left
      plugged in overnight is the habit it measures.
@@ -79,7 +82,7 @@ battery sessions
 
 charging sessions
   0926-0742  07:42 → 09:12   31% → 100%   full in 1h 11m · 19m at 100%
-  0926-1405  14:05 → 15:30   12% → 96%    unplugged before full
+  0926-1405  14:05 → 15:30   12% → 96%    96% in 1h 18m · unplugged before full
 
 on battery 6h 05m · on AC 4h 12m · asleep 1h 40m
 ```
@@ -97,12 +100,15 @@ A charge session:
 {"id": "0927-0140", "start": 1790448052, "end": 1790475999,
  "start_pct": 20, "end_pct": 100,
  "full_at": 1790453512, "minutes_to_full": 91, "full_is_upper_bound": false,
+ "max_pct": 100, "minutes_to_max_pct": 91, "max_is_upper_bound": false,
  "minutes_at_full": 374,
  "not_charging_minutes": 0, "not_charging_pct": null,
  "est_minutes_to_full": null, "charging": false, "ongoing": false, "data_gap": false}
 ```
 `end` is `null` while ongoing; `full_at`, `minutes_to_full` and
 `minutes_at_full` are `null` when it never reached 100 %;
+`max_pct` is the highest percent on the charger and `minutes_to_max_pct`
+the time to its first sample, an upper bound when `max_is_upper_bound`;
 `not_charging_pct` is `null` without a hold; `est_minutes_to_full` is set
 only for an ongoing session that is charging; `charging` is true only for
 one that is ongoing and charging at its newest sample.

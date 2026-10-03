@@ -440,7 +440,7 @@ func TestHistoryChargeSessions(t *testing.T) {
 	}
 	for _, w := range []string{
 		`{"id":"0926-0100","start":` + jsonInt(histAt(60)) + `,"end":` + jsonInt(histAt(120)) + `,"start_pct":90,"end_pct":100,"full_at":` + jsonInt(histAt(119)) +
-			`,"minutes_to_full":59,"full_is_upper_bound":false,"minutes_at_full":1,"not_charging_minutes":0,"not_charging_pct":null,"est_minutes_to_full":null,"charging":false,"ongoing":false,"data_gap":false}`,
+			`,"minutes_to_full":59,"full_is_upper_bound":false,"max_pct":100,"minutes_to_max_pct":59,"max_is_upper_bound":false,"minutes_at_full":1,"not_charging_minutes":0,"not_charging_pct":null,"est_minutes_to_full":null,"charging":false,"ongoing":false,"data_gap":false}`,
 		`"id":"0926-1140"`, `"est_minutes_to_full":97,"charging":true,"ongoing":true`,
 	} {
 		if !strings.Contains(out, w) {
@@ -460,5 +460,21 @@ func TestHistoryShowsAChargeWithNoEventsToday(t *testing.T) {
 	if !strings.Contains(got, "charging sessions\n  0925-2300   yesterday 23:00 → now   60% → 99%   charging · full in ~") ||
 		strings.Contains(got, "no charge/discharge events") {
 		t.Errorf("got:\n%s", got)
+	}
+}
+
+func TestHistoryChargeUnpluggedBeforeFull(t *testing.T) {
+	// Plugged in at 00:00 at 30 %, 80 % by 00:49, unplugged at 00:50.
+	stubHistory(t, 120, [][5]int{{-10, 0, 60, 55, 0}, {0, 50, 30, 80, 1}, {50, 60, 79, 75, 0}}, nil, nil, nil)
+	got, err := run(t, "history")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(got, "30% → 80%   80% in 49m · unplugged before full\n") {
+		t.Errorf("got:\n%s", got)
+	}
+	out, err := run(t, "history", "--json")
+	if err != nil || !strings.Contains(out, `"full_at":null,"minutes_to_full":null,"full_is_upper_bound":false,"max_pct":80,"minutes_to_max_pct":49,"max_is_upper_bound":false`) {
+		t.Errorf("json: %v\n%s", err, out)
 	}
 }

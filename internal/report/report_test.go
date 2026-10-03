@@ -194,7 +194,7 @@ func TestCharging(t *testing.T) {
 		// Woke on the charger full: an upper bound, not a time to full.
 		{Start: 600 * m, StartPct: 40, EndPct: 100, FullAt: 900 * m, FullUpperBound: true, AtFullMin: 10},
 		// Unplugged at 96 %.
-		{Start: 1000 * m, StartPct: 50, EndPct: 96},
+		{Start: 1000 * m, StartPct: 50, EndPct: 95, MaxPct: 96},
 		// Plugged in full: at full, but not reached.
 		{Start: 1100 * m, StartPct: 100, EndPct: 100, FullAt: 1100 * m, AtFullMin: 30},
 		// Ongoing and full for 600 min so far: the longest, not in the median.
