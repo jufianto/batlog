@@ -9,13 +9,13 @@
 │                            ││  0│█████████░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░█████████│
 │ ▸ 1 Battery                ││   └────────────────────────────────────────────────────────────────────────────────────│
 │   2 Apps                   ││    02:00   03:00   04:00    05:00   06:00    07:00   08:00   09:00    10:00   11:00    │
-│   3 Report                 ││                                                                                        │
-│   4 Health                 ││⚡ session 0926-0200 · 02:00 → 03:00 · 59m awake · 100% → 95% (5.1 %/hr)                │
+│   3 Report                 ││█ on battery  ▓ on AC  ░ asleep  blank: no data · ← → read a time                       │
+│   4 Health                 ││                                                                                        │
+│                            ││100% 02:00 → 90% 11:40 → now 88%                                                        │
+│ range today                ││                                                                                        │
+│ data  just now             ││⚡ session 0926-0200 · 02:00 → 03:00 · 59m awake · 100% → 95% (5.1 %/hr)                │
 │                            ││ #   APP             SHARE   BATTERY COST                                               │
-│ range today                ││ 1   Brave Browser   60%     ≈ 3% of battery                                            │
-│ data  just now             ││                                                                                        │
-│                            ││                                                                                        │
-│                            ││                                                                                        │
+│                            ││ 1   Brave Browser   60%     ≈ 3% of battery                                            │
 │                            ││                                                                                        │
 │                            ││                                                                                        │
 │                            ││                                                                                        │
@@ -37,4 +37,4 @@
 │                            ││                                                                                        │
 │                            ││                                                                                        │
 └────────────────────────────┘└────────────────────────────────────────────────────────────────────────────────────────┘
- esc back · 1-4 view · t today · w week · [ ] earlier/later · r refresh · q quit                                        
+ esc back · ← → read the chart · 1-4 view · t today · w week · [ ] earlier/later · q quit                               

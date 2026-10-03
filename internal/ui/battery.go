@@ -7,7 +7,11 @@ import (
 	"strings"
 	"time"
 
+	"github.com/charmbracelet/x/ansi"
+
 	"github.com/jufianto/batlog/internal/history"
+	"github.com/jufianto/batlog/internal/localday"
+	"github.com/jufianto/batlog/internal/store"
 	"github.com/jufianto/batlog/internal/textfmt"
 )
 
@@ -49,7 +53,53 @@ func chartRows(h int) int { return min(max(h/3, 3), 8) }
 
 // batListH is how many list rows fit under the chart, totals and header.
 func (m Model) batListH() int {
-	return m.bodyH() - (chartRows(m.bodyH()) + 2) - 3
+	return m.bodyH() - (chartRows(m.bodyH()) + 4) - 3
+}
+
+// chartSpan is what the Battery chart covers: the range, or the open
+// session's or charge's own span.
+func (m Model) chartSpan() (from, to time.Time) {
+	t := m.now()
+	if m.batOpen && m.hist != nil {
+		items := batItems(*m.hist)
+		if m.bat.cur < len(items) {
+			it := items[m.bat.cur]
+			end, ongoing := int64(0), false
+			if it.s != nil {
+				end, ongoing = it.s.End, it.s.Ongoing
+			} else {
+				end, ongoing = it.c.End, it.c.Ongoing
+			}
+			if ongoing {
+				end = t.Unix()
+			}
+			loc := t.Location()
+			return time.Unix(it.start, 0).In(loc), time.Unix(max(end, it.start+60), 0).In(loc)
+		}
+	}
+	return m.rng.From, m.rng.ChartEnd()
+}
+
+// chartColumns are the Battery chart's columns at the current width.
+func (m Model) chartColumns() []column {
+	if m.hist == nil {
+		return nil
+	}
+	from, to := m.chartSpan()
+	return pctColumns(max(0, m.mainW()-2-4), m.hist.Samples, m.hist.RunStarts, from.Unix(), to.Unix())
+}
+
+// moveCursor shows the chart's cursor at the newest data, then moves it.
+func (m *Model) moveCursor(step int) {
+	cs := m.chartColumns()
+	if len(cs) == 0 {
+		return
+	}
+	if m.cursor < 0 || m.cursor >= len(cs) {
+		m.cursor = lastData(cs)
+		return
+	}
+	m.cursor = min(max(m.cursor+step, 0), len(cs)-1)
 }
 
 func (m Model) batteryView(title string, w, h int) (string, []string) {
@@ -64,7 +114,8 @@ func (m Model) batteryView(title string, w, h int) (string, []string) {
 	if m.batOpen && m.bat.cur < len(items) {
 		return m.batDetail(items[m.bat.cur], w, h)
 	}
-	out := pctChart(w-4, chartRows(h), hs.Samples, hs.RunStarts, m.rng.From, m.rng.ChartEnd(), m.st)
+	from, to := m.chartSpan()
+	out := pctChart(m.chartColumns(), chartRows(h), from, to, m.cursor, m.st)
 	out = append(out, textfmt.Totals(hs.Result.Totals), "")
 	if len(items) == 0 {
 		return title, append(out, "no sessions in this range")
@@ -144,17 +195,10 @@ func (m Model) estToFull(c history.ChargeSession) *int {
 // figures.
 func (m Model) batDetail(it batItem, w, h int) (string, []string) {
 	hs, t := *m.hist, m.now()
-	from, ongoing, end := it.start, false, int64(0)
-	if it.s != nil {
-		ongoing, end = it.s.Ongoing, it.s.End
-	} else {
-		ongoing, end = it.c.Ongoing, it.c.End
-	}
-	if ongoing {
-		end = t.Unix()
-	}
-	loc := t.Location()
-	out := pctChart(w-4, chartRows(h), hs.Samples, hs.RunStarts, time.Unix(from, 0).In(loc), time.Unix(max(end, from+60), 0).In(loc), m.st)
+	from, to := m.chartSpan()
+	out := pctChart(m.chartColumns(), chartRows(h), from, to, m.cursor, m.st)
+	ongoing := it.s != nil && it.s.Ongoing || it.c != nil && it.c.Ongoing
+	out = append(out, wrapDots(milestones(hs.Samples, from.Unix(), to.Unix(), it.c != nil, ongoing, t), w)...)
 	out = append(out, "")
 	if s := it.s; s != nil {
 		title := "1 Battery · session " + s.ID
@@ -180,4 +224,76 @@ func (m Model) batDetail(it batItem, w, h int) (string, []string) {
 		out = append(out, "the recorder was down for part of it (data gap)")
 	}
 	return "1 Battery · charge " + c.ID, out
+}
+
+// milestones are when a session crossed each tenth on the way down, or a
+// charge on the way up, from its start to how it ended: "99% yesterday
+// 23:27 → 90% 01:30 → … → plugged in 21:56 at 21%". A crossing is the
+// first sample at or past the tenth. A time names its day only when the
+// day changes.
+func milestones(samples []store.Sample, from, to int64, charge, ongoing bool, t time.Time) []string {
+	var in []store.Sample
+	for _, s := range samples {
+		if s.TS >= from && s.TS <= to {
+			in = append(in, s)
+		}
+	}
+	if len(in) == 0 {
+		return nil
+	}
+	day := localday.Start(time.Unix(in[0].TS, 0).In(t.Location()))
+	clock := func(ts int64) string {
+		at := time.Unix(ts, 0).In(t.Location())
+		if d := localday.Start(at); !d.Equal(day) {
+			day = d
+			return textfmt.Clock(ts, t)
+		}
+		return at.Format("15:04")
+	}
+	first, last := in[0], in[len(in)-1]
+	out := []string{fmt.Sprintf("%d%% %s", first.Pct, textfmt.Clock(first.TS, t))}
+	next := (first.Pct - 1) / 10 * 10 // the tenth below the start
+	if charge {
+		next = (first.Pct/10 + 1) * 10
+	}
+	for _, s := range in[1:] {
+		for charge && next <= 100 && s.Pct >= next || !charge && next > 0 && s.Pct <= next {
+			out = append(out, fmt.Sprintf("%d%% %s", next, clock(s.TS)))
+			if charge {
+				next += 10
+			} else {
+				next -= 10
+			}
+		}
+	}
+	switch {
+	case ongoing:
+		out = append(out, fmt.Sprintf("now %d%%", last.Pct))
+	case charge:
+		out = append(out, fmt.Sprintf("unplugged %s at %d%%", clock(to), last.Pct))
+	default:
+		out = append(out, fmt.Sprintf("plugged in %s at %d%%", clock(to), last.Pct))
+	}
+	return out
+}
+
+// wrapDots joins parts with " → " in lines at most w cells wide.
+func wrapDots(parts []string, w int) []string {
+	var lines []string
+	line := ""
+	for _, p := range parts {
+		switch {
+		case line == "":
+			line = p
+		case ansi.StringWidth(line)+3+ansi.StringWidth(p) <= w:
+			line += " → " + p
+		default:
+			lines = append(lines, line+" →")
+			line = p
+		}
+	}
+	if line != "" {
+		lines = append(lines, line)
+	}
+	return lines
 }

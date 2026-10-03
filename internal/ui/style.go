@@ -10,24 +10,28 @@ import (
 // styles colours text, or leaves it plain without colour (NO_COLOR,
 // TERM=dumb, not a terminal): the layout and every figure stay the same.
 type styles struct {
-	color bool
-	ac    lipgloss.Style // on AC, charging
-	sleep lipgloss.Style // asleep, and secondary text
-	warn  lipgloss.Style
-	bad   lipgloss.Style
-	title lipgloss.Style
-	sel   lipgloss.Style // the selected row
+	color  bool
+	bat    lipgloss.Style // awake on battery
+	cursor lipgloss.Style // the chart cursor's column
+	ac     lipgloss.Style // on AC, charging
+	sleep  lipgloss.Style // asleep, and secondary text
+	warn   lipgloss.Style
+	bad    lipgloss.Style
+	title  lipgloss.Style
+	sel    lipgloss.Style // the selected row
 }
 
 func newStyles(color bool) styles {
 	return styles{
-		color: color,
-		ac:    lipgloss.NewStyle().Foreground(lipgloss.Color("2")),
-		sleep: lipgloss.NewStyle().Faint(true),
-		warn:  lipgloss.NewStyle().Foreground(lipgloss.Color("3")),
-		bad:   lipgloss.NewStyle().Foreground(lipgloss.Color("1")),
-		title: lipgloss.NewStyle().Bold(true),
-		sel:   lipgloss.NewStyle().Reverse(true),
+		color:  color,
+		bat:    lipgloss.NewStyle().Foreground(lipgloss.Color("6")),
+		cursor: lipgloss.NewStyle().Foreground(lipgloss.Color("3")),
+		ac:     lipgloss.NewStyle().Foreground(lipgloss.Color("2")),
+		sleep:  lipgloss.NewStyle().Faint(true),
+		warn:   lipgloss.NewStyle().Foreground(lipgloss.Color("3")),
+		bad:    lipgloss.NewStyle().Foreground(lipgloss.Color("1")),
+		title:  lipgloss.NewStyle().Bold(true),
+		sel:    lipgloss.NewStyle().Reverse(true),
 	}
 }
 

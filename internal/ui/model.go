@@ -79,6 +79,7 @@ type Model struct {
 	series   []Point
 	serFor   string
 	scroll   [numViews]int // the report's and health view's first line
+	cursor   int           // the Battery chart's cursor column; -1 for none
 	fails    map[string]int
 	loadedAt time.Time
 }
@@ -95,7 +96,7 @@ func New(ctx context.Context, src Source, o Options) Model {
 		o.Now = time.Now
 	}
 	return Model{src: src, ctx: ctx, now: o.Now, st: newStyles(o.Color), static: o.static,
-		rng: MakeRange(o.Now(), false, 0), fails: map[string]int{}}
+		rng: MakeRange(o.Now(), false, 0), fails: map[string]int{}, cursor: -1}
 }
 
 // Run shows the UI until the user quits.
@@ -317,6 +318,7 @@ func (m Model) key(k string) (tea.Model, tea.Cmd) {
 		m.help = !m.help
 		return m, nil
 	case "esc":
+		m.cursor = -1
 		switch {
 		case m.help:
 			m.help = false
@@ -350,7 +352,14 @@ func (m Model) key(k string) (tea.Model, tea.Cmd) {
 	case "r":
 		return m, tea.Batch(m.loadLive(), m.loadView())
 	case "enter":
+		m.cursor = -1
 		return m.open()
+	case "left", "h", "right", "l", "shift+left", "H", "shift+right", "L":
+		if m.view == BatteryView && !m.help {
+			m.moveCursor(map[string]int{"left": -1, "h": -1, "right": 1, "l": 1,
+				"shift+left": -10, "H": -10, "shift+right": 10, "L": 10}[k])
+		}
+		return m, nil
 	}
 	if m.help {
 		return m, nil
@@ -359,7 +368,7 @@ func (m Model) key(k string) (tea.Model, tea.Cmd) {
 }
 
 func (m Model) switchTo(v View) (tea.Model, tea.Cmd) {
-	m.view, m.help = v, false
+	m.view, m.help, m.cursor = v, false, -1
 	if m.stale() {
 		return m, m.loadView()
 	}
@@ -368,7 +377,7 @@ func (m Model) switchTo(v View) (tea.Model, tea.Cmd) {
 
 func (m Model) setRange(week bool, back int) (tea.Model, tea.Cmd) {
 	m.rng = MakeRange(m.now(), week, back)
-	m.batOpen, m.appOpen, m.help = false, false, false
+	m.batOpen, m.appOpen, m.help, m.cursor = false, false, false, -1
 	m.scroll[ReportView] = 0
 	return m, m.loadView()
 }
@@ -551,8 +560,12 @@ func (m Model) keyLine() string {
 	switch {
 	case m.help:
 		keys = "esc close · q quit"
-	case m.batOpen && m.view == BatteryView, m.appOpen && m.view == AppsView:
+	case m.batOpen && m.view == BatteryView:
+		keys = "esc back · ← → read the chart · 1-4 view · t today · w week · [ ] earlier/later · q quit"
+	case m.appOpen && m.view == AppsView:
 		keys = "esc back · 1-4 view · t today · w week · [ ] earlier/later · r refresh · q quit"
+	case m.view == BatteryView:
+		keys = "1-4 view · ↑↓ select · ← → read the chart · enter open · t today · w week · [ ] earlier/later · ? help · q quit"
 	case m.view == ReportView || m.view == HealthView:
 		keys = "1-4 view · ↑↓ scroll · t today · w week · [ ] earlier/later · r refresh · ? help · q quit"
 	}
@@ -564,6 +577,7 @@ func helpLines() []string {
 		"Keys",
 		"  1-4, Tab, Shift-Tab   switch views",
 		"  ↑ ↓  k j  PgUp PgDn   move the selection or scroll",
+		"  ← → h l (Shift: ×10)  move the chart's cursor: its time and battery %",
 		"  g G                   first, last",
 		"  Enter / Esc           open a row's detail / back",
 		"  t / w                 today / the last 7 days",
@@ -580,7 +594,9 @@ func helpLines() []string {
 		"  3 Report    the daily or weekly report.",
 		"  4 Health    battery health now, and per day since recording began.",
 		"",
-		"Chart: █ on battery · ▓ on AC (green) · ░ asleep · blank: no data",
+		"Chart: each column is a slice of time, its height the lowest battery %",
+		"in it. Colours: on battery, on AC (green), asleep (dim); blank: no data.",
+		"Without colour: █ on battery · ▓ on AC · ░ asleep.",
 		"batlog ui only reads; it never changes your Mac or its data.",
 	}
 }

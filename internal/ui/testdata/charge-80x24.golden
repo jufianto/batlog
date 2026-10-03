@@ -8,17 +8,17 @@
 │ condition Normal           ││  0│▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓│
 │                            ││   └────────────────────────────────────────────│
 │ ▸ 1 Battery                ││    01:00                                       │
-│   2 Apps                   ││                                                │
-│   3 Report                 ││charge 0926-0100 · 01:00 → 02:00 · 90% → 100%   │
-│   4 Health                 ││full in 59m                                     │
-│                            ││1m at 100%                                      │
-│ range today                ││                                                │
-│ data  just now             ││                                                │
+│   2 Apps                   ││█ on battery  ▓ on AC  ░ asleep  blank: no data…│
+│   3 Report                 ││                                                │
+│   4 Health                 ││90% 01:00 → 100% 01:59 → unplugged 02:00 at 100%│
 │                            ││                                                │
+│ range today                ││charge 0926-0100 · 01:00 → 02:00 · 90% → 100%   │
+│ data  just now             ││full in 59m                                     │
+│                            ││1m at 100%                                      │
 │                            ││                                                │
 │                            ││                                                │
 │                            ││                                                │
 │                            ││                                                │
 │                            ││                                                │
 └────────────────────────────┘└────────────────────────────────────────────────┘
- esc back · 1-4 view · t today · w week · [ ] earlier/later · r refresh · q quit
+ esc back · ← → read the chart · 1-4 view · t today · w week · [ ] earlier/late…

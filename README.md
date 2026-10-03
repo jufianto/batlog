@@ -126,14 +126,16 @@ than run five commands. The sidebar keeps the live status and health in
 view; the main area has four views:
 
 1. **Battery:** battery % over today or the week (green on AC, dim asleep),
-   and every battery session and charge. Enter on one shows its chart and
-   top apps, or a charge's time to full and time at 100%.
+   and every battery session and charge. Enter on one shows its chart,
+   when it passed each 10% (`99% 23:27 → 90% 01:30 → … → plugged in 21:56
+   at 21%`), and its top apps, or a charge's time to full and time at 100%.
 2. **Apps:** which apps used the most energy and what each cost the
    battery. Enter on one shows its energy by hour or day.
 3. **Report:** the daily or weekly report.
 4. **Health:** health now and per day since recording began.
 
-Keys: `1`–`4` switch views, `↑↓` select, `enter`/`esc` open and close,
+Keys: `1`–`4` switch views, `↑↓` select, `←→` move a cursor along the
+chart to read its time and battery %, `enter`/`esc` open and close,
 `t`/`w` today or the last 7 days, `[` `]` the day or week before or after,
 `?` help, `q` quit. It refreshes every minute and only reads: it never
 writes to your data. It needs a window of at least 80×24.

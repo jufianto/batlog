@@ -43,14 +43,18 @@ func drain(m tea.Model, cmd tea.Cmd) tea.Model {
 }
 
 var namedKeys = map[string]tea.Key{
-	"enter":     {Code: tea.KeyEnter},
-	"esc":       {Code: tea.KeyEscape},
-	"up":        {Code: tea.KeyUp},
-	"down":      {Code: tea.KeyDown},
-	"pgup":      {Code: tea.KeyPgUp},
-	"pgdown":    {Code: tea.KeyPgDown},
-	"tab":       {Code: tea.KeyTab},
-	"shift+tab": {Code: tea.KeyTab, Mod: tea.ModShift},
+	"enter":       {Code: tea.KeyEnter},
+	"esc":         {Code: tea.KeyEscape},
+	"up":          {Code: tea.KeyUp},
+	"down":        {Code: tea.KeyDown},
+	"pgup":        {Code: tea.KeyPgUp},
+	"pgdown":      {Code: tea.KeyPgDown},
+	"tab":         {Code: tea.KeyTab},
+	"left":        {Code: tea.KeyLeft},
+	"right":       {Code: tea.KeyRight},
+	"shift+left":  {Code: tea.KeyLeft, Mod: tea.ModShift},
+	"shift+right": {Code: tea.KeyRight, Mod: tea.ModShift},
+	"shift+tab":   {Code: tea.KeyTab, Mod: tea.ModShift},
 }
 
 func keyPress(name string) tea.KeyPressMsg {
