@@ -15,6 +15,7 @@ import (
 	"github.com/jufianto/batlog/internal/paths"
 	"github.com/jufianto/batlog/internal/status"
 	"github.com/jufianto/batlog/internal/store"
+	"github.com/jufianto/batlog/internal/textfmt"
 )
 
 // Swapped by tests so nothing shells out or touches the real data directory.
@@ -43,7 +44,18 @@ func runStatus(ctx context.Context, out, errw io.Writer, asJSON bool) error {
 	if err != nil {
 		return err
 	}
-	t := now()
+	r, dbBroken := buildStatus(ctx, errw, snap, now())
+	if asJSON {
+		return writeStatusJSON(out, r)
+	}
+	renderStatus(out, r, dbBroken)
+	return nil
+}
+
+// buildStatus adds the daemon's history to a battery reading: drain, the
+// estimates and the worst app. dbBroken is a database that exists but
+// failed to open; the warning went to errw.
+func buildStatus(ctx context.Context, errw io.Writer, snap battery.Snapshot, t time.Time) (r status.Report, dbBroken bool) {
 	since := t.Add(-status.Window).Unix()
 
 	var samples []store.Sample
@@ -52,7 +64,6 @@ func runStatus(ctx context.Context, out, errw io.Writer, asJSON bool) error {
 	// to full is still better than none.
 	def := charge.Learn([charge.Bands]charge.BandStat{})
 	curve := &def
-	dbBroken := false
 	if p, err := dbPath(); err == nil && store.Exists(p) {
 		// A database that fails to open is a warning, never a reason to hide
 		// the live fields. status never creates the database.
@@ -79,16 +90,12 @@ func runStatus(ctx context.Context, out, errw io.Writer, asJSON bool) error {
 		}
 	}
 
-	r := status.Build(snap, samples, energy, t)
+	r = status.Build(snap, samples, energy, t)
 	if r.OnAC && r.Charging && r.Percent < 100 && curve != nil {
 		m := curve.MinutesToFull(r.Percent)
 		r.EstToFull = &m
 	}
-	if asJSON {
-		return writeStatusJSON(out, r)
-	}
-	renderStatus(out, r, dbBroken)
-	return nil
+	return r, dbBroken
 }
 
 // statusJSON is the stable schema from docs/specs/F1-status.md.
@@ -200,20 +207,9 @@ func renderStatus(w io.Writer, r status.Report, dbBroken bool) {
 	}
 }
 
-func fmtDuration(minutes int) string {
-	if minutes < 60 {
-		return fmt.Sprintf("%dm", minutes)
-	}
-	return fmt.Sprintf("%dh %02dm", minutes/60, minutes%60)
-}
+func fmtDuration(minutes int) string { return textfmt.Duration(minutes) }
 
-func joinDot(parts []string) string {
-	out := parts[0]
-	for _, p := range parts[1:] {
-		out += " · " + p
-	}
-	return out
-}
+func joinDot(parts []string) string { return textfmt.JoinDot(parts) }
 
 func round2(f float64) float64 {
 	return float64(int(f*100+0.5)) / 100

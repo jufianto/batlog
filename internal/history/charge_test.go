@@ -182,3 +182,26 @@ func TestChargeDriftAfterFullIsNotAHold(t *testing.T) {
 		t.Errorf("session = %+v; want no hold, full at 01:00, 60 min at full (unplugged 02:00)", c)
 	}
 }
+
+func TestAPastRangeHoldsOnlyWhatStartedInIt(t *testing.T) {
+	// The range ends at 02:00; samples run on to 05:00, as they do for a
+	// past day. The charge at 01:00 and the session from 01:30 are in it;
+	// the charge at 03:00 and the session from 04:00 are not.
+	in := Input{From: midnight, To: time.Unix(at(120), 0), FirstSampleTS: at(0), Samples: cat(
+		seg(0, 60, 80, 60, false),
+		charging(seg(60, 90, 60, 80, true)),
+		seg(90, 180, 80, 50, false),
+		charging(seg(180, 240, 50, 90, true)),
+		seg(240, 300, 90, 80, false),
+	)}
+	r := Build(in)
+	if len(r.ChargeSessions) != 1 || r.ChargeSessions[0].Start != at(60) {
+		t.Errorf("charges = %+v", r.ChargeSessions)
+	}
+	if n := len(r.Sessions); n != 2 || r.Sessions[n-1].Start != at(90) || r.Sessions[n-1].End != at(180) {
+		t.Errorf("sessions = %+v", r.Sessions)
+	}
+	if r.Lasted == nil || r.Lasted.Ongoing {
+		t.Errorf("lasted = %+v, want the 01:30 session", r.Lasted)
+	}
+}
