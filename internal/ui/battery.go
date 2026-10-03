@@ -153,7 +153,8 @@ func (m Model) batDetail(it batItem, w, h int) (string, []string) {
 	if ongoing {
 		end = t.Unix()
 	}
-	out := pctChart(w-4, chartRows(h), hs.Samples, hs.RunStarts, time.Unix(from, 0), time.Unix(max(end, from+60), 0), m.st)
+	loc := t.Location()
+	out := pctChart(w-4, chartRows(h), hs.Samples, hs.RunStarts, time.Unix(from, 0).In(loc), time.Unix(max(end, from+60), 0).In(loc), m.st)
 	out = append(out, "")
 	if s := it.s; s != nil {
 		title := "1 Battery · session " + s.ID
