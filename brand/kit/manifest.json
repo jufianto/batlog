@@ -1,7 +1,7 @@
 {
   "about": "Every input and output of the kit builder, and the token values it drew with. brand/check fails when a file or a token no longer matches: run make brand-kit.",
   "brand": "batlog",
-  "date": "2026-11-09",
+  "date": "2026-11-10",
   "tokens": {
     "brand.black": "#000000",
     "brand.cyan": "#0891b2",
@@ -13,12 +13,12 @@
   },
   "files": {
     "batlog-brand-guide.pdf": {
-      "sha256": "0eb6c8a0d5aaa877c250bf2ef3c7af63343f0298cb23ad08edca382fc56510f0",
-      "bytes": 657056
+      "sha256": "0a6c22bbf82bdb7ba92fde3e761c6d5e7fa467e457b8a468f8dbb0c69cf2efcb",
+      "bytes": 657041
     },
     "batlog-overview.png": {
-      "sha256": "bef02a181a0f5e0d42890c78c81e15c0a264086a7abd75832c8bc5563bbc3f46",
-      "bytes": 75084
+      "sha256": "c800d6aecfa156b9e2d8d9c660752d5589e88f9af46074dcf1d4aae56df8cd50",
+      "bytes": 73577
     },
     "fonts/JetBrainsMono-SemiBold.ttf": {
       "sha256": "12d4b18fe6e1af528e4bea69cb0997aeff22f9e52fccffcf66342dd88aa32ab8",
@@ -341,8 +341,8 @@
       "bytes": 53277
     },
     "source/build_kit.py": {
-      "sha256": "73b089791756a3837e416e6cf0e7b2fe2e411743298f9a5c0d804a80e7cd63ef",
-      "bytes": 21271
+      "sha256": "9704b01b3949d3ed76b9f44ef0c6cc4400e16f3609035c79c6afec776b71f800",
+      "bytes": 21293
     },
     "source/geometry.py": {
       "sha256": "a2ee675e0cd722639d660610c49325d2914a6c423df0eec939415883fb944241",
