@@ -94,9 +94,14 @@ func TestMutationsFail(t *testing.T) {
 			"accent paints #ff00ff, which maps to no token"},
 		{"a colour in a file with no surface has no token",
 			func(t *testing.T, root string) {
+				write(t, root, "internal/fresh/fresh.go", "package fresh\n\nconst purple = \"\\x1b[35m\"\n")
+			},
+			"internal/fresh/fresh.go:3 purple paints ansi:5, which maps to no token: this file has no surface"},
+		{"even a token's value needs a surface to be painted",
+			func(t *testing.T, root string) {
 				write(t, root, "internal/fresh/fresh.go", "package fresh\n\nconst green = \"\\x1b[32m\"\n")
 			},
-			"internal/fresh/fresh.go:3 green paints ansi:2, which maps to no token: this file has no surface"},
+			"internal/fresh/fresh.go:3 green paints ansi:2, a token's value, but this file has no surface"},
 		{"a renamed style loses its mapping",
 			func(t *testing.T, root string) {
 				edit(t, root, "internal/ui/style.go", "\t\tsel:    lipgloss", "\t\tpick:   lipgloss")
@@ -221,5 +226,15 @@ func TestHexesSkipsReferencesAndFragments(t *testing.T) {
 	got := hexes("batlog#333333 &#123456; /#abcdef (#deadbeef) #0891B2 #abc", false)
 	if strings.Join(got, " ") != "#deadbeef #0891b2" {
 		t.Fatalf("hexes = %q", got)
+	}
+}
+
+// Prose that names the tags (`<source>`, `<img>`), and code, show no image.
+func TestImageTagsInProseShowNothing(t *testing.T) {
+	doc := "Use `<picture>`, `<source>` and `<img src=\"a.svg\">`; also <source media=\"x\">.\n" +
+		"```html\n<img src=\"brand/kit/svg/batlog-mark-ink.svg\">\n```\n"
+	got, err := imageColours(t.TempDir(), "doc.md", doc)
+	if err != nil || len(got) != 0 {
+		t.Fatalf("imageColours = %v, %v; want nothing", got, err)
 	}
 }
