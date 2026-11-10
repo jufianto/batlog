@@ -160,7 +160,9 @@ func Run(root string) (Result, error) {
 			if s.allows(cfg, f.value, values) {
 				continue
 			}
-			if key == "" {
+			if key == "" && values[f.value] {
+				r.Problems = append(r.Problems, fmt.Sprintf("%s paints %s, a token's value, but this file has no surface in %s: add one that maps or allows it", where, f.value, TokensPath))
+			} else if key == "" {
 				r.Problems = append(r.Problems, fmt.Sprintf("%s paints %s, which maps to no token: this file has no surface in %s", where, f.value, TokensPath))
 			} else {
 				r.Problems = append(r.Problems, fmt.Sprintf("%s paints %s, which maps to no token in its surface %q", where, f.value, key))
@@ -571,15 +573,16 @@ func jsonColours(rel string, data []byte) ([]found, error) {
 }
 
 var (
-	htmlImg = regexp.MustCompile(`(?is)<(source|img)\b([^>]*)>`)
-	mdImg   = regexp.MustCompile(`!\[[^\]]*\]\(([^)\s]+)`)
-	attrRe  = regexp.MustCompile(`(?is)\b(media|srcset|src)\s*=\s*"([^"]*)"`)
+	htmlImg  = regexp.MustCompile(`(?is)<(source|img)\b([^>]*)>`)
+	mdImg    = regexp.MustCompile(`!\[[^\]]*\]\(([^)\s]+)`)
+	codeSpan = regexp.MustCompile("`[^`]*`")
+	attrRe   = regexp.MustCompile(`(?is)\b(media|srcset|src)\s*=\s*"([^"]*)"`)
 )
 
 // imageColours is the colours of each local SVG a Markdown file shows: a
 // <picture>'s <source media="..."> is "source[<media>]", an <img> or ![]()
 // is "img". GitHub cannot tint an image, so the file's colours are what the
-// page paints.
+// page paints. Code (fenced blocks, `spans`) shows no image and is skipped.
 func imageColours(root, rel, s string) ([]found, error) {
 	var out []found
 	count := map[string]int{}
@@ -605,7 +608,16 @@ func imageColours(root, rel, s string) ([]found, error) {
 		out = append(out, found{key: key, value: strings.Join(vs, " and "), line: line})
 		return nil
 	}
+	fenced := false
 	for i, line := range strings.Split(s, "\n") {
+		if t := strings.TrimSpace(line); strings.HasPrefix(t, "```") || strings.HasPrefix(t, "~~~") {
+			fenced = !fenced
+			continue
+		}
+		if fenced {
+			continue
+		}
+		line = codeSpan.ReplaceAllString(line, "")
 		for _, m := range htmlImg.FindAllStringSubmatch(line, -1) {
 			a := map[string]string{}
 			for _, am := range attrRe.FindAllStringSubmatch(m[2], -1) {
@@ -613,7 +625,10 @@ func imageColours(root, rel, s string) ([]found, error) {
 			}
 			key, src := "img", a["src"]
 			if strings.EqualFold(m[1], "source") {
-				key, src = "source["+a["media"]+"]", strings.Fields(a["srcset"] + " ")[0]
+				key, src = "source["+a["media"]+"]", ""
+				if f := strings.Fields(a["srcset"]); len(f) > 0 {
+					src = f[0] // the first candidate; a density ("2x") may follow
+				}
 			}
 			if err := add(key, src, i+1); err != nil {
 				return nil, err
