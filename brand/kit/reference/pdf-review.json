@@ -1,6 +1,6 @@
 {
-  "date": "2026-11-09",
-  "sha256": "0eb6c8a0d5aaa877c250bf2ef3c7af63343f0298cb23ad08edca382fc56510f0",
+  "date": "2026-11-10",
+  "sha256": "0a6c22bbf82bdb7ba92fde3e761c6d5e7fa467e457b8a468f8dbb0c69cf2efcb",
   "pages_reviewed": [
     1,
     2,
@@ -10,6 +10,6 @@
     6,
     7
   ],
-  "method": "Poppler 100dpi rendering; all seven pages visually inspected. Updated comparison and platform-format pages individually checked, unchanged pages rechecked in final montage.",
-  "artwork_review": "Originals, normalized source comparison, exact-arc curve details, reverse mark and actual/enlarged 16-64px micro symbols inspected. Proposed type/accent/usage remain for owner review."
+  "method": "Poppler 100dpi rendering; all seven pages inspected after the adoption wording change (pages 1, 2, 3, 4, 5 and 7 text, every page's date). Page 2 re-inspected after its subtitle fix; the other six renders were byte-identical to the reviewed ones.",
+  "artwork_review": "Artwork unchanged from the 2026-11-09 review: every SVG and PNG rebuilt byte for byte. Text checked for overflow and wrapping; no claim of proposals or of an unchanged app remains."
 }

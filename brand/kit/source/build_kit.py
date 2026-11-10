@@ -30,7 +30,7 @@ TEMP=ROOT/'.build'
 FONT=ROOT/'fonts/JetBrainsMono-SemiBold.ttf'
 REGULAR=ROOT/'fonts/PlusJakartaSans-400.ttf'
 SEMI=ROOT/'fonts/PlusJakartaSans-600.ttf'
-DATE='2026-11-09'
+DATE='2026-11-10' # adopted by batlog
 PRIMARY='Designing_batlog_logo_symbol_343191ad_2K.jpg'
 ALTERNATIVE='Design_logo_for_battery_tool_e655feea_2K.jpg'
 jobs=[]
@@ -130,7 +130,7 @@ def sheets():
     overview=Image.new('RGB',(1800,1250),MIST);d=ImageDraw.Draw(overview)
     d.text((70,45),'batlog',font=ImageFont.truetype(str(FONT),70),fill=INK)
     txt(d,(72,143),'Understand what drained your battery.',29)
-    txt(d,(72,197),'BRAND KIT / RECONSTRUCTED SYMBOL / WORKING PROPOSAL / '+DATE,18,MUTED)
+    txt(d,(72,197),'BRAND KIT / RECONSTRUCTED SYMBOL / ADOPTED / '+DATE,18,MUTED)
     d.rounded_rectangle((70,265,1110,850),radius=24,fill=WHITE)
     paste(overview,Image.open(ROOT/'png/batlog-mark-ink.png'),(110,305,960,480))
     txt(d,(105,795),'PRIMARY SYMBOL / battery + recorded history',20)
@@ -175,7 +175,7 @@ def sheets():
 def guide():
     for name,p in [('Body',REGULAR),('Semi',SEMI),('Mono',FONT)]:pdfmetrics.registerFont(RLFont(name,str(p)))
     c=canvas.Canvas(str(ROOT/'batlog-brand-guide.pdf'),pagesize=(842,595),invariant=1)
-    c.setTitle('batlog - Brand guide');c.setAuthor('batlog / Jufi')
+    c.setTitle('batlog - Brand guide');c.setAuthor('batlog')
     def rect(x,y,w,h,col,r=0):c.setFillColor(HexColor(col));c.roundRect(x,y,w,h,r,stroke=0,fill=1)
     def txt(x,y,s,size=12,color=INK,font='Body'):
         c.setFillColor(HexColor(color));c.setFont(font,size);c.drawString(x,y,s)
@@ -192,14 +192,14 @@ def guide():
         rect(0,0,842,595,WHITE);txt(42,556,'BATLOG / BRAND GUIDE',10,MUTED,'Semi');txt(680,556,DATE,10,MUTED)
         txt(42,510,title,30,INK,'Semi');txt(42,482,subtitle,11,MUTED)
         txt(42,25,kicker,9,MUTED);txt(760,25,f'{n:02d} / 07',9,MUTED)
-    page(1,'Understand what drained your battery.','A local-first macOS tool for battery history and per-app energy.','IDENTITY / WORKING PROPOSAL')
+    page(1,'Understand what drained your battery.','A local-first macOS tool for battery history and per-app energy.','IDENTITY')
     txt(42,410,'batlog',60,INK,'Mono')
     para(44,358,'Quiet recording. Clear history. Useful answers about the apps and sessions that used your battery.',325,16,INK,25)
     rect(435,200,365,245,MIST,22);img('png/batlog-mark-ink.png',450,220,335,200)
     para(44,214,'The battery identifies the subject. The descending trace represents measurements over time. The simple silhouette works in one color and on light or dark backgrounds.',335,12)
-    para(44,106,'Owner-supplied Flow concept; hand-authored vector reconstruction. New lettering, accent and usage defaults are proposals. This headline is proposed brand copy.',730,10)
+    para(44,106,'Owner-supplied Flow concept; hand-authored vector reconstruction. The lettering and usage rules are adopted. Signal Cyan stays an optional accent, and the headline is suggested brand copy.',730,10)
     c.showPage()
-    page(2,'Choose the clearest story.','The solid battery with one descending line is the selected working primary.','SOURCE & RECONSTRUCTION')
+    page(2,'Choose the clearest story.','The solid battery with one descending line is the selected primary.','SOURCE & RECONSTRUCTION')
     img('reference/reconstruction-comparison.png',30,175,782,285)
     para(42,152,'The alternative is preserved, not discarded. Its nested frame and trace introduce more visual competition; the primary communicates the same idea with fewer shapes.',745,12)
     para(42,88,'The SVG regularizes the silhouette, corner radii and step spacing. It is reconstructed artwork, not an original Flow vector or a pixel-identical copy. Both supplied JPEGs remain unchanged.',745,10)
@@ -209,18 +209,18 @@ def guide():
         x=42+i*260;bg=INK if i==2 else MIST;rect(x,290,240,160,bg,12);img(f'png/{name}.png',x+10,300,220,140)
         txt(x,263,label,17,INK,'Semi');para(x,238,desc,235,11)
     img('png/batlog-horizontal-ink.png',42,105,370,105)
-    para(445,172,'Lowercase batlog is the written identity and command name. Proposed lettering: JetBrains Mono Semibold, delivered as vector outlines.',350,12)
+    para(445,172,'Lowercase batlog is the written identity and command name. The lettering is JetBrains Mono SemiBold, delivered as vector outlines.',350,12)
     para(445,94,'Use the full name in introductions: batlog, a macOS battery and per-app energy tracker.',350,11)
     c.showPage()
-    page(4,'Neutral ink. A measured accent.','The source is monochrome; cyan is an optional proposed brand accent.','COLOR & TYPOGRAPHY')
-    for i,(label,col,role) in enumerate([('Battery Ink',INK,'Source median normalized to solid ink'),('Signal Cyan',CYAN,'Proposed digital accent'),('White',WHITE,'Background / reverse artwork')]):
+    page(4,'Neutral ink. A measured accent.','The source is monochrome; cyan is an optional brand accent.','COLOR & TYPOGRAPHY')
+    for i,(label,col,role) in enumerate([('Battery Ink',INK,'Source median normalized to solid ink'),('Signal Cyan',CYAN,'Optional digital accent'),('White',WHITE,'Background / reverse artwork')]):
         x=42+i*260;rect(x,310,240,140,MIST,12);rect(x+12,322,216,116,col,8)
         txt(x,282,label,17,INK,'Semi');txt(x,258,col,14,MUTED);txt(x,232,role,10,MUTED)
-    txt(42,176,'batlog',34,INK,'Mono');para(42,131,'JetBrains Mono Semibold for the proposed wordmark and command examples. Plus Jakarta Sans for this guide and optional supporting brand copy. Both font families include OFL licenses.',350,11)
+    txt(42,176,'batlog',34,INK,'Mono');para(42,131,'JetBrains Mono SemiBold for the wordmark and command examples. Plus Jakarta Sans for this guide and optional supporting brand copy. Both font families include OFL licenses.',350,11)
     txt(445,176,'Terminal colors stay flexible.',17,INK,'Semi')
-    para(445,145,'The app uses ANSI cyan, green, yellow and red. Their actual colors depend on the terminal theme. Signal Cyan is not a hard-coded app color, and this kit changes no terminal styles.',350,11)
+    para(445,145,'The app uses ANSI cyan, green, yellow and red. Their actual colors depend on the terminal theme. Signal Cyan is never a terminal color; the ANSI roles are tokens too.',350,11)
     c.showPage()
-    page(5,'Keep the history line clear.','Proposed usage defaults; review at the final size.','SPACING & CONTRAST')
+    page(5,'Keep the history line clear.','Rules for placed logos; check them at the final size.','SPACING & CONTRAST')
     rect(42,190,350,250,MIST,14);img('png/batlog-mark-ink.png',87,230,260,173.3333)
     bbox=Image.open(ROOT/'png/batlog-mark-ink.png').getchannel('A').getbbox();scale=260/2400
     l,t,r,b=[v*scale for v in bbox];pad=(b-t)/4
@@ -251,7 +251,7 @@ def guide():
     y=para(445,400,'Be direct, calm and specific. Say "See which apps used the most energy" or "Compare battery sessions over time." Distinguish estimated battery cost from direct per-app measurements.',350,12)
     y=para(445,y-16,'Avoid unsupported claims such as "double your battery life," "exact battery cost for every app," or "automatic battery optimization."',350,12)
     txt(445,y-15,'batlog top --session last',14,INK,'Mono')
-    para(42,99,'Handoff: SVGs, PNGs, icons, brand-information.md, editable source, licensed fonts and source snapshots. Review lettering, optional cyan and usage defaults. No application assets, code or release were changed.',745,10)
+    para(42,99,'In the batlog repository: brand/kit holds these SVGs, PNGs, icons, fonts, the builder and this guide; brand/tokens.json is the palette; docs/reference/brand.md has the rules. The README shows the lockup; the terminal keeps ANSI colors and the user\'s font.',745,10)
     c.showPage();c.save()
 
 
