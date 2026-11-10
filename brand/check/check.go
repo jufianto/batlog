@@ -506,20 +506,26 @@ func lineColours(s string, short bool) []found {
 }
 
 var (
-	paintAttr = regexp.MustCompile(`(?i)\b(fill|stroke|stop-color|flood-color|lighting-color|color)\s*(=\s*"([^"]*)"|:\s*([^;"'>]+))`)
-	namedOK   = map[string]string{"white": "#ffffff", "black": "#000000"}
+	colourFunc = regexp.MustCompile(`(?i)(?:^|[^\w-])((?:rgba?|hsla?|hwb|(?:ok)?lab|(?:ok)?lch|color)\([^()]*\))`)
+	paintAttr  = regexp.MustCompile(`(?i)\b(fill|stroke|stop-color|flood-color|lighting-color|color)\s*(=\s*"([^"]*)"|:\s*([^;"'>]+))`)
+	namedOK    = map[string]string{"white": "#ffffff", "black": "#000000"}
 )
 
-// markupColours reads hex anywhere, and named colours in paint attributes
-// (fill="white"), which must also be tokens.
+// markupColours reads hex anywhere, colour functions (rgb(), hsl()...),
+// which always fail because every token is hex, and named colours in paint
+// attributes (fill="white"), which must also be tokens.
 func markupColours(s string) []found {
 	out := lineColours(s, true)
 	for i, line := range strings.Split(s, "\n") {
+		for _, m := range colourFunc.FindAllStringSubmatch(line, -1) {
+			out = append(out, found{key: "line " + strconv.Itoa(i+1), value: m[1], line: i + 1})
+		}
 		for _, m := range paintAttr.FindAllStringSubmatch(line, -1) {
 			v := strings.TrimSpace(m[3] + m[4])
 			lv := strings.ToLower(v)
 			switch {
 			case lv == "", strings.HasPrefix(lv, "#"), strings.HasPrefix(lv, "url("), strings.HasPrefix(lv, "var("),
+				colourFunc.MatchString(" " + lv),
 				lv == "none", lv == "currentcolor", lv == "transparent", lv == "inherit":
 				continue
 			}
