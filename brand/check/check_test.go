@@ -149,6 +149,21 @@ func TestMutationsFail(t *testing.T) {
 				}
 			},
 			"brand/kit/batlog-overview.png is in the kit manifest but missing"},
+		{"the README's dark-mode lockup shows the light-mode file",
+			func(t *testing.T, root string) {
+				edit(t, root, "README.md", `srcset="brand/kit/svg/batlog-horizontal-white.svg"`, `srcset="brand/kit/svg/batlog-horizontal-ink.svg"`)
+			},
+			"README.md:3 source[(prefers-color-scheme: dark)] is #242021, but its token brand.white is #ffffff (drift)"},
+		{"the dark-mode wordmark changes colour",
+			func(t *testing.T, root string) {
+				edit(t, root, "brand/kit/svg/batlog-horizontal-white.svg", `<g fill="#FFFFFF">`, `<g fill="#E6E6E6">`)
+			},
+			"README.md:3 source[(prefers-color-scheme: dark)] is #e6e6e6 and #ffffff, but its token brand.white is #ffffff (drift)"},
+		{"the README stops showing the lockup",
+			func(t *testing.T, root string) {
+				edit(t, root, "README.md", `<img src="brand/kit/svg/batlog-horizontal-ink.svg" alt="batlog" width="280">`, `batlog`)
+			},
+			`README.md: mapped name "img" (token brand.ink) is no longer in the file`},
 		{"a binary file needs an explicit exception",
 			func(t *testing.T, root string) {
 				write(t, root, "brand/blob.bin", "\x00\x01")

@@ -1,4 +1,9 @@
-# batlog
+<h1>
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="brand/kit/svg/batlog-horizontal-white.svg">
+    <img src="brand/kit/svg/batlog-horizontal-ink.svg" alt="batlog" width="280">
+  </picture>
+</h1>
 
 [![ci](https://github.com/jufianto/batlog/actions/workflows/ci.yml/badge.svg)](https://github.com/jufianto/batlog/actions/workflows/ci.yml)
 [![MIT licence](https://img.shields.io/badge/licence-MIT-blue.svg)](./LICENSE)
