@@ -14,6 +14,20 @@ for which job, the rules, and how to change anything here.
 | `fonts/` | JetBrains Mono SemiBold (the wordmark) and Plus Jakarta Sans (the guide), with their OFL licences |
 | `reference/` | Review sheets (source comparison, curve detail, small sizes) and the PDF review record |
 | `history/` | The kit's own notes as delivered, a historical snapshot |
+| `source/` | The builder: `geometry.py` (the symbol), `build_kit.py`, `verify_kit.py`, `render.mjs`, pinned `requirements.txt` and npm lockfile, and the two supplied JPEGs in `originals/` |
+| `manifest.json` | The builder's record: a hash of every input and output, and the token values it drew with |
 
-Every colour in the SVGs and the manifest is a token in
-[brand/tokens.json](../tokens.json); `make brand-check` fails if one drifts.
+Every file here except this README, `history/`, `reference/pdf-review.json`
+and `reference/validation.json` is built by `source/`. Do not edit them by
+hand:
+
+```sh
+make brand-kit         # rebuild brand/kit from brand/tokens.json, the geometry and the fonts
+make brand-kit-check   # rebuild into a temporary copy; fails unless every file is the same, byte for byte
+```
+
+Both need Python 3.11+ and npm; they install pinned packages into
+`source/.venv` and `source/node_modules` (both gitignored). `make brand-check`
+needs only Go: it fails when a kit file or a token the kit was drawn with no
+longer matches `manifest.json`, so CI catches a stale kit without Python.
+The byte-for-byte rebuild is verified on macOS on Apple Silicon.

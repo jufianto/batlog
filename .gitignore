@@ -20,3 +20,9 @@ coverage.*
 
 # goreleaser output
 dist/
+
+# Brand kit builder: local dependencies and scratch output
+brand/kit/source/node_modules/
+brand/kit/source/.venv/
+brand/kit/.build/
+__pycache__/

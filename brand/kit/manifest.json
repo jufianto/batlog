@@ -1,0 +1,460 @@
+{
+  "about": "Every input and output of the kit builder, and the token values it drew with. brand/check fails when a file or a token no longer matches: run make brand-kit.",
+  "brand": "batlog",
+  "date": "2026-11-09",
+  "tokens": {
+    "brand.black": "#000000",
+    "brand.cyan": "#0891b2",
+    "brand.ink": "#242021",
+    "brand.white": "#ffffff",
+    "guide.mist": "#f4f6f8",
+    "guide.muted": "#5b6573",
+    "guide.swatch-edge": "#dce1e5"
+  },
+  "files": {
+    "batlog-brand-guide.pdf": {
+      "sha256": "0eb6c8a0d5aaa877c250bf2ef3c7af63343f0298cb23ad08edca382fc56510f0",
+      "bytes": 657056
+    },
+    "batlog-overview.png": {
+      "sha256": "bef02a181a0f5e0d42890c78c81e15c0a264086a7abd75832c8bc5563bbc3f46",
+      "bytes": 75084
+    },
+    "fonts/JetBrainsMono-SemiBold.ttf": {
+      "sha256": "12d4b18fe6e1af528e4bea69cb0997aeff22f9e52fccffcf66342dd88aa32ab8",
+      "bytes": 273504
+    },
+    "fonts/OFL-JetBrainsMono.txt": {
+      "sha256": "a76abf002c49097d146e86740a3105a5d00450b1592e820a1109a8c5680cd697",
+      "bytes": 4399
+    },
+    "fonts/OFL-PlusJakartaSans.txt": {
+      "sha256": "995c7199cab65954f545996326755daee7b63cc6b42b06c13da1f9502ab08a99",
+      "bytes": 4402
+    },
+    "fonts/PlusJakartaSans-400.ttf": {
+      "sha256": "02a20292cad94f8ec5850b8217818bada6758d1ef8212253a3030d993af0589a",
+      "bytes": 29468
+    },
+    "fonts/PlusJakartaSans-600.ttf": {
+      "sha256": "7f84de32c933a517604990b80d24406e88868767f7ee3ba3b4ad3e3870cc5a80",
+      "bytes": 29532
+    },
+    "icons/apple-touch-icon.png": {
+      "sha256": "cf9cf2a16deaaa11475facad57a18fb06a0662c54adf3abe5d5823fa2f09d44f",
+      "bytes": 5754
+    },
+    "icons/batlog-app-dark-1024.png": {
+      "sha256": "132641a2bd89f2e8054309620a1e38cb084523e9cb96a452a28cc789566b07a8",
+      "bytes": 37003
+    },
+    "icons/batlog-app-dark-128.png": {
+      "sha256": "0efbae48ba5911e48b4e1e620a01261442619ae352c681d76da6641e66a46f7a",
+      "bytes": 4092
+    },
+    "icons/batlog-app-dark-16.png": {
+      "sha256": "3f7d5a80e87ff4affaf5ec9814b5674fb05c14517afc94d172f31c5a5709d7a8",
+      "bytes": 589
+    },
+    "icons/batlog-app-dark-180.png": {
+      "sha256": "cf9cf2a16deaaa11475facad57a18fb06a0662c54adf3abe5d5823fa2f09d44f",
+      "bytes": 5754
+    },
+    "icons/batlog-app-dark-192.png": {
+      "sha256": "9b8173a22b3fa16a57edb5e304ae99fcfc2e027aa3834c2d40debdeb36f922dd",
+      "bytes": 6281
+    },
+    "icons/batlog-app-dark-24.png": {
+      "sha256": "9ae9ab93110bab23441891d9a485cb2a0ef2fed6c1dc46f199f3c6b9f83ed249",
+      "bytes": 853
+    },
+    "icons/batlog-app-dark-256.png": {
+      "sha256": "27430c84e11422c1ac8d1c7bf2bf13870000f0e1fde281573f9284bfc413fa10",
+      "bytes": 8392
+    },
+    "icons/batlog-app-dark-32.png": {
+      "sha256": "43ac431562bb5fc5d03f066adfc1c92b8003c5369088e4dd6142f8c5d8fdff71",
+      "bytes": 1127
+    },
+    "icons/batlog-app-dark-48.png": {
+      "sha256": "2d7864bd3f952eee261d3961663bad0e5a775b8b78d04dddc04026f648926ed6",
+      "bytes": 1529
+    },
+    "icons/batlog-app-dark-512.png": {
+      "sha256": "f5dcd7e27829b0c85db793137c43f124b547dcfc3b2ffa4041b28eefdc026ae5",
+      "bytes": 17158
+    },
+    "icons/batlog-app-dark-64.png": {
+      "sha256": "9c9ad42805e2151594a343612ff38b859f6a35451e5e2b136a8d29849ef3d580",
+      "bytes": 2069
+    },
+    "icons/batlog-app-light-1024.png": {
+      "sha256": "7de31122162cae2d6dc41fc2d308a994870696bd1b7eadbe16b7db5fd800a230",
+      "bytes": 32952
+    },
+    "icons/batlog-app-light-128.png": {
+      "sha256": "f4b04dd626a6bf787cfdea165623807c1bce73256178707ad2c0c8b509cfa547",
+      "bytes": 3661
+    },
+    "icons/batlog-app-light-16.png": {
+      "sha256": "22134c325a878cb9b713ba2ebe0699990dcaff3e0a99fc31c0aa5b6b3d3866ca",
+      "bytes": 544
+    },
+    "icons/batlog-app-light-180.png": {
+      "sha256": "b495e49d174d6d269f2dd5290b247f650c275e1398dba78d11ed8f22a458c818",
+      "bytes": 5130
+    },
+    "icons/batlog-app-light-192.png": {
+      "sha256": "d87f27bea89a8014799b50ee311ad201185934b806b89bbc3829402253d92a69",
+      "bytes": 5558
+    },
+    "icons/batlog-app-light-24.png": {
+      "sha256": "a04348aec9d51eb8d48017129ba853cf1f1196f44e90171376f9f5f277f1130b",
+      "bytes": 817
+    },
+    "icons/batlog-app-light-256.png": {
+      "sha256": "2962efc23752f51731537af9ed9b6796a7ecf5b04a4e06b53d143bd0c2e53bc1",
+      "bytes": 7381
+    },
+    "icons/batlog-app-light-32.png": {
+      "sha256": "2252de69bbe60a21e152d604f3af16b0b88f27696a1cff00faee19d794c41e3f",
+      "bytes": 1057
+    },
+    "icons/batlog-app-light-48.png": {
+      "sha256": "90e6894c03e153e627c86de3d82acac71a63f605162267b61f8197517de93c35",
+      "bytes": 1380
+    },
+    "icons/batlog-app-light-512.png": {
+      "sha256": "5f5e49a9fec123a299a5bf2dee060014ccfc1d1cab7cd1f4cf231550d840f613",
+      "bytes": 15122
+    },
+    "icons/batlog-app-light-64.png": {
+      "sha256": "8f22d37e5de2f6561b9a4e24be5be0b8f44eebc747beaf8a8650d831023d6ebd",
+      "bytes": 1794
+    },
+    "icons/batlog-dark.ico": {
+      "sha256": "1e51d164766c850751d7a365dce9a5ac0f1fc5daa8a30f5199ae6b6ff004019e",
+      "bytes": 18769
+    },
+    "icons/batlog-light.ico": {
+      "sha256": "6624790e9b969ff78b29b16509d3e36a5101e39564f85533e8253c533832ee89",
+      "bytes": 16752
+    },
+    "icons/batlog-symbol-black-16.png": {
+      "sha256": "15f9deb9015ea8befd72565e7952a3c47d1da70b0fdaf242a00f05723741850a",
+      "bytes": 213
+    },
+    "icons/batlog-symbol-black-24.png": {
+      "sha256": "0e204bc3bcba3a38d3e2dccce4632da0ea785e27852bfeaa4e612cbba6e9d8eb",
+      "bytes": 284
+    },
+    "icons/batlog-symbol-black-32.png": {
+      "sha256": "10625921dc9987782f62971f9d88086d6496551169a4bc86a4bd01fa03450323",
+      "bytes": 339
+    },
+    "icons/batlog-symbol-black-48.png": {
+      "sha256": "701fdc296b5912a25b600ebc24bc9c1032956d19581c7ba210d18178e023cd94",
+      "bytes": 491
+    },
+    "icons/batlog-symbol-black-64.png": {
+      "sha256": "f30b85d4ec4d6c8d520cb8cd62b3e57f52fa5129d493812da6462475a98b15ac",
+      "bytes": 584
+    },
+    "icons/batlog-symbol-ink-16.png": {
+      "sha256": "6657a5b5a96e4190a1e5ee2ec1046e36613e6cc098598d8ba4771335853f7deb",
+      "bytes": 274
+    },
+    "icons/batlog-symbol-ink-24.png": {
+      "sha256": "2442e1196b0abd9d3bb4ed0ed2d74c7a823b967eb33663780986022275f287c1",
+      "bytes": 357
+    },
+    "icons/batlog-symbol-ink-32.png": {
+      "sha256": "fa72beff19ae3087243a918d88d91c662d3f9f9349c2f34ab9098459300ceae8",
+      "bytes": 427
+    },
+    "icons/batlog-symbol-ink-48.png": {
+      "sha256": "40610841db5959445f3d9f6748113a2193ae310e99d28a7796af5160726663a7",
+      "bytes": 563
+    },
+    "icons/batlog-symbol-ink-64.png": {
+      "sha256": "3d6dbc2dd6a9a69468b772ef25a3153390e2f7f2458db5dbcc0bef9e57c616d6",
+      "bytes": 671
+    },
+    "icons/batlog-symbol-white-16.png": {
+      "sha256": "2c9765d53eb23628f99cdad8f637c15704deee040c41849d3e4ec4663b50b1c9",
+      "bytes": 226
+    },
+    "icons/batlog-symbol-white-24.png": {
+      "sha256": "0e42403e9bd9a9ec2207416a415032b7106a83626342166a72be0a4b98d1c308",
+      "bytes": 307
+    },
+    "icons/batlog-symbol-white-32.png": {
+      "sha256": "ebaab08c9970a0f1b6cefbce2106e7ed0abbcfc3087566724034fbaae94db006",
+      "bytes": 373
+    },
+    "icons/batlog-symbol-white-48.png": {
+      "sha256": "c99bd99871f29b0ddca745bd450a4cece359dec4384b81d7ec963fb227fbba69",
+      "bytes": 544
+    },
+    "icons/batlog-symbol-white-64.png": {
+      "sha256": "5bded14ab9dea46a75f18a799b8a422fb2fcc18722a77e649c76aebe427ba9c2",
+      "bytes": 636
+    },
+    "icons/batlog.icns": {
+      "sha256": "6d2c7a68a8bec35f1c04576b1a20ba0920797dd5e2ae77abe8f288330aaa8b45",
+      "bytes": 82633
+    },
+    "icons/batlog.iconset/icon_128x128.png": {
+      "sha256": "0efbae48ba5911e48b4e1e620a01261442619ae352c681d76da6641e66a46f7a",
+      "bytes": 4092
+    },
+    "icons/batlog.iconset/icon_128x128@2x.png": {
+      "sha256": "27430c84e11422c1ac8d1c7bf2bf13870000f0e1fde281573f9284bfc413fa10",
+      "bytes": 8392
+    },
+    "icons/batlog.iconset/icon_16x16.png": {
+      "sha256": "3f7d5a80e87ff4affaf5ec9814b5674fb05c14517afc94d172f31c5a5709d7a8",
+      "bytes": 589
+    },
+    "icons/batlog.iconset/icon_16x16@2x.png": {
+      "sha256": "43ac431562bb5fc5d03f066adfc1c92b8003c5369088e4dd6142f8c5d8fdff71",
+      "bytes": 1127
+    },
+    "icons/batlog.iconset/icon_256x256.png": {
+      "sha256": "27430c84e11422c1ac8d1c7bf2bf13870000f0e1fde281573f9284bfc413fa10",
+      "bytes": 8392
+    },
+    "icons/batlog.iconset/icon_256x256@2x.png": {
+      "sha256": "f5dcd7e27829b0c85db793137c43f124b547dcfc3b2ffa4041b28eefdc026ae5",
+      "bytes": 17158
+    },
+    "icons/batlog.iconset/icon_32x32.png": {
+      "sha256": "43ac431562bb5fc5d03f066adfc1c92b8003c5369088e4dd6142f8c5d8fdff71",
+      "bytes": 1127
+    },
+    "icons/batlog.iconset/icon_32x32@2x.png": {
+      "sha256": "9c9ad42805e2151594a343612ff38b859f6a35451e5e2b136a8d29849ef3d580",
+      "bytes": 2069
+    },
+    "icons/batlog.iconset/icon_512x512.png": {
+      "sha256": "f5dcd7e27829b0c85db793137c43f124b547dcfc3b2ffa4041b28eefdc026ae5",
+      "bytes": 17158
+    },
+    "icons/batlog.iconset/icon_512x512@2x.png": {
+      "sha256": "132641a2bd89f2e8054309620a1e38cb084523e9cb96a452a28cc789566b07a8",
+      "bytes": 37003
+    },
+    "icons/favicon-32.png": {
+      "sha256": "43ac431562bb5fc5d03f066adfc1c92b8003c5369088e4dd6142f8c5d8fdff71",
+      "bytes": 1127
+    },
+    "icons/site.webmanifest": {
+      "sha256": "6dbc7b5c5548339d93e0b62fafcda82c384fce2123ebcbaa1cb4d1fffc6fed61",
+      "bytes": 385
+    },
+    "png/batlog-app-icon-dark.png": {
+      "sha256": "bb88541ab1a93cdec7ba56f2fe78d61243b731cd8c9c5fa886eeb01ba0168477",
+      "bytes": 52631
+    },
+    "png/batlog-app-icon-light.png": {
+      "sha256": "9bc0aef7e8fcec6807f970f8c2b29cf3da719b886b722b34c5d72cb785bdd3a8",
+      "bytes": 49683
+    },
+    "png/batlog-horizontal-black.png": {
+      "sha256": "1035fb184396fbd8539b94c313f4f31a4dde79871866e0bfe3d7e221be323e0d",
+      "bytes": 34124
+    },
+    "png/batlog-horizontal-cyan.png": {
+      "sha256": "25e2d44cb435b2d15cf410e8c2e9cd40593fb3253540f20bb8ec2dc05e8ef806",
+      "bytes": 38942
+    },
+    "png/batlog-horizontal-ink.png": {
+      "sha256": "43840c4f53a5deb987c11cc94d6bc428d8f2e10ffe7ea55cfcc96557457313e0",
+      "bytes": 38675
+    },
+    "png/batlog-horizontal-white.png": {
+      "sha256": "598ae80ff8df501d5a9665857718b95653f13b5229858807664927db2e7cf6d5",
+      "bytes": 42375
+    },
+    "png/batlog-mark-black.png": {
+      "sha256": "bfb010a630b56c26e006ad19370d9438c73d95130a6a754b69688b0db378c1d8",
+      "bytes": 33694
+    },
+    "png/batlog-mark-cyan.png": {
+      "sha256": "ebb1855fed553bf6339c1a37ea1fca6ad220718b1bf1b9a9ab1472a374f32df9",
+      "bytes": 39003
+    },
+    "png/batlog-mark-ink.png": {
+      "sha256": "e6fc2afe716e268e17e69ff84542c3431729004b2738d42dae454463f68d5ed5",
+      "bytes": 38218
+    },
+    "png/batlog-mark-micro-black.png": {
+      "sha256": "3f2a5a810615c781b18461557df9c27cf291e131f6d1bb21ad6654edbd9a7745",
+      "bytes": 34811
+    },
+    "png/batlog-mark-micro-ink.png": {
+      "sha256": "55d3e432eb71fa6de3b356d351500d4435eda0719798d6ae220994601ec2b65e",
+      "bytes": 40424
+    },
+    "png/batlog-mark-micro-white.png": {
+      "sha256": "c2b95247c71165bc9e10e8e590eacc61448064684c8a93a6446dbd0135494914",
+      "bytes": 41824
+    },
+    "png/batlog-mark-white.png": {
+      "sha256": "d7c7f6b233225c06ac98200f8268d3e3693b99ce70ca21e74ee308dc4e172c06",
+      "bytes": 39988
+    },
+    "png/batlog-stacked-black.png": {
+      "sha256": "cc1719a7a8ed966b64ffbcf49f445f452982c1d2e15ca88e628de0331dd0b8f4",
+      "bytes": 57961
+    },
+    "png/batlog-stacked-ink.png": {
+      "sha256": "8f7eea21e54237542dea922cc92f9885eb751f24dcf2fecd1653c770d5f874d7",
+      "bytes": 64995
+    },
+    "png/batlog-stacked-white.png": {
+      "sha256": "317bc8245ca2c99fc96a16431dd45823d551797127fd1eee77adcb95d9c22785",
+      "bytes": 69295
+    },
+    "png/batlog-wordmark-black.png": {
+      "sha256": "f8874cc8199ca682daf3e5dcf4d5c8d52dc8137f100a59c0834e94601b0b4321",
+      "bytes": 42341
+    },
+    "png/batlog-wordmark-ink.png": {
+      "sha256": "a54cfb5c9655640c50efe2bea3ffe53d2c493a0972e28fb95ba8778a28eb4c3b",
+      "bytes": 48834
+    },
+    "png/batlog-wordmark-white.png": {
+      "sha256": "d420864ef4bafac9dfe708d532516a8e09cdc300c8306d7c2dfae7e8b4285e1f",
+      "bytes": 53883
+    },
+    "reference/curve-detail-check.png": {
+      "sha256": "966241e4faa4bd85ddaeb3982e077be7d6972da3118420b5d55806f337226bac",
+      "bytes": 36894
+    },
+    "reference/reconstruction-comparison.png": {
+      "sha256": "2c0bb7c1b8c3ecfc8ee98d5bd69ea8113e29a5da0dc9e281e934828bc785b24d",
+      "bytes": 287775
+    },
+    "reference/small-size-check.png": {
+      "sha256": "440858fb2d0c513e8790a4e92e4c4dd4224b51718305d9cf6e825eefb7f9d6ed",
+      "bytes": 53277
+    },
+    "source/build_kit.py": {
+      "sha256": "73b089791756a3837e416e6cf0e7b2fe2e411743298f9a5c0d804a80e7cd63ef",
+      "bytes": 21271
+    },
+    "source/geometry.py": {
+      "sha256": "a2ee675e0cd722639d660610c49325d2914a6c423df0eec939415883fb944241",
+      "bytes": 984
+    },
+    "source/originals/Design_logo_for_battery_tool_e655feea_2K.jpg": {
+      "sha256": "4389b101e99f1ed2bae7c26b29bc43af39b827d7c574ed3e46cee47f01ce66b1",
+      "bytes": 751311
+    },
+    "source/originals/Designing_batlog_logo_symbol_343191ad_2K.jpg": {
+      "sha256": "9e4c7dabf3f61a13be11a89dfbc9fc54c5e6eadb873b481622d3b1cb84c91a5e",
+      "bytes": 1090211
+    },
+    "source/package-lock.json": {
+      "sha256": "4676fc4a1a78b2692191d229c1038f950b9e91d1f92a030ce89c7a8c2f314140",
+      "bytes": 7257
+    },
+    "source/package.json": {
+      "sha256": "c68e1469d0fcd24520d6b7d34dd65694f7abeb713c47ed0398cd722fafb33e45",
+      "bytes": 134
+    },
+    "source/render.mjs": {
+      "sha256": "b1f57968ee867d651e6b2c83d46da0c8e6f1173f1f5391db2939e9724a8772b5",
+      "bytes": 375
+    },
+    "source/requirements.txt": {
+      "sha256": "19106e4023385f08018dbbb8e59af6c23068fded9c9c2f7bee96a9595795edc0",
+      "bytes": 89
+    },
+    "source/tokens.py": {
+      "sha256": "809b3293df0312569c8e9beef24169eee2bd1c451b83a746f84d1b9920a9e0f3",
+      "bytes": 813
+    },
+    "source/verify_kit.py": {
+      "sha256": "07ccb8285d5f23c3424927614e5510431e7557253b3d50f5fe284d36fac82b5f",
+      "bytes": 5498
+    },
+    "svg/batlog-app-icon-dark.svg": {
+      "sha256": "ec8f9939b18454873dcf0137316b024f4bbfbd460cb1bff47337ffa71fe835ab",
+      "bytes": 697
+    },
+    "svg/batlog-app-icon-light.svg": {
+      "sha256": "7f527ae703a4c4234b370931603ff015531863ae1e250ac89b26bfb3f1fe3567",
+      "bytes": 699
+    },
+    "svg/batlog-horizontal-black.svg": {
+      "sha256": "1c838cd628d0c65d7c24510930f94ba2e03297cd8062f9a245026edf16ad8cb9",
+      "bytes": 2828
+    },
+    "svg/batlog-horizontal-cyan.svg": {
+      "sha256": "284b48355886b473a993a42e662573b5bcf9d75020c1648970c083e50480d9b3",
+      "bytes": 2826
+    },
+    "svg/batlog-horizontal-ink.svg": {
+      "sha256": "99510ebcf03123d7d77cacc5e0baae1e806def7ac210c04897d999efe2851354",
+      "bytes": 2824
+    },
+    "svg/batlog-horizontal-white.svg": {
+      "sha256": "11e8f93556554e84569e61668f2c313c9f4b1942ba9558014a1cf0df2bbd8f69",
+      "bytes": 2828
+    },
+    "svg/batlog-mark-black.svg": {
+      "sha256": "93b080b99806c93a1bfe564e03315179f7684f77b8061c6a3c1d5c4329ef5485",
+      "bytes": 583
+    },
+    "svg/batlog-mark-cyan.svg": {
+      "sha256": "bfc3228f95d5b25914ca306733998af7ce28053155ca8004326ba1541abe5c2e",
+      "bytes": 581
+    },
+    "svg/batlog-mark-ink.svg": {
+      "sha256": "fa2c84f98c6d936af4892c9d1ce190fc5395f4b68b92d52adf30fe10ce05829a",
+      "bytes": 579
+    },
+    "svg/batlog-mark-micro-black.svg": {
+      "sha256": "4e9b655fc04038d26526d0a28c16f364198b2ae03b348fd16f4fce3ee5c528bd",
+      "bytes": 595
+    },
+    "svg/batlog-mark-micro-ink.svg": {
+      "sha256": "8efa9868925229f02fff32c40adcfca3851d27ebde912de7607130508ecc2f48",
+      "bytes": 591
+    },
+    "svg/batlog-mark-micro-white.svg": {
+      "sha256": "9a4d212006c7bb49f4970e500a2db16ad0102586e8b5f8f1d40945e156b383af",
+      "bytes": 595
+    },
+    "svg/batlog-mark-white.svg": {
+      "sha256": "38b3ae5f22a6a5c6a279e5b275792682f72b80a2d8d1d7021f1b745366532f3d",
+      "bytes": 583
+    },
+    "svg/batlog-stacked-black.svg": {
+      "sha256": "171f5ac27af5699c00dee31d9368de33e00f6c6696672da35dd2a52b99c6377c",
+      "bytes": 2779
+    },
+    "svg/batlog-stacked-ink.svg": {
+      "sha256": "8f77c3502ff04e9176661c4fc7097bb3bcd36d29f9233f7a108a66cb66cf3a4b",
+      "bytes": 2775
+    },
+    "svg/batlog-stacked-white.svg": {
+      "sha256": "b4773684ae49980b3919ca07ecb8663c83a91e49306a730c06634b34b48da25c",
+      "bytes": 2779
+    },
+    "svg/batlog-wordmark-black.svg": {
+      "sha256": "4f7b97bceddf8330db31eeefd8497c66651233d8356bbcba0738cbb6dba95a81",
+      "bytes": 2361
+    },
+    "svg/batlog-wordmark-ink.svg": {
+      "sha256": "c3fe33be395b0d7d6abbae21fa8d181753ae595e8cec01b98968660a00cc1b95",
+      "bytes": 2357
+    },
+    "svg/batlog-wordmark-white.svg": {
+      "sha256": "c3784aa1327622ed0cdda513988d81c6277fa7d364f11d8a01ab9bb5d6be71fb",
+      "bytes": 2361
+    }
+  }
+}

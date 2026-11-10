@@ -9,7 +9,10 @@
 //   - a mapped name is no longer in its file, or a surface matches no file;
 //   - a Markdown line names one token (`brand.ink`) next to a different value;
 //   - brand text (brand/, the brand docs and skill) names a personal path or
-//     the old product name.
+//     the old product name;
+//   - brand/kit is stale: a file the builder reads or writes changed, appeared
+//     or went missing since the last make brand-kit, or a token it drew with
+//     has another value now. (make brand-kit-check proves the rebuild itself.)
 //
 // Exceptions live in tokens.json "unchecked", each with its reason. It reads
 // every file git would track: .gitignore'd paths are skipped. Standard library
@@ -17,6 +20,8 @@
 package main
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"flag"
@@ -170,6 +175,7 @@ func Run(root string) (Result, error) {
 			r.Problems = append(r.Problems, docsDrift(rel, data, cfg)...)
 		}
 	}
+	r.Problems = append(r.Problems, kitStale(root, cfg, files)...)
 	for _, key := range sortedKeys(cfg.Surfaces) {
 		if surfaceHits[key] == 0 {
 			r.Problems = append(r.Problems, fmt.Sprintf("%s: surface %q matches no file", TokensPath, key))
@@ -870,6 +876,79 @@ func guard(rel string, data []byte) []string {
 		if i := strings.Index(low, strings.ToLower(w)); i >= 0 {
 			line := strings.Count(low[:i], "\n") + 1
 			out = append(out, fmt.Sprintf("%s:%d names %q: brand text must not carry personal paths or the old product name", rel, line, w))
+		}
+	}
+	return out
+}
+
+// --- kit manifest -----------------------------------------------------------
+
+const kitDir = "brand/kit/"
+
+// kitUnmanaged are the hand-written files in brand/kit: the builder neither
+// reads nor writes them. build_kit.py's UNMANAGED is the same list.
+var kitUnmanaged = []string{"README.md", "manifest.json", "history/", "reference/pdf-review.json", "reference/validation.json"}
+
+func kitManaged(rel string) bool {
+	for _, u := range kitUnmanaged {
+		if rel == u || strings.HasSuffix(u, "/") && strings.HasPrefix(rel, u) {
+			return false
+		}
+	}
+	return true
+}
+
+// kitStale compares brand/kit with the manifest the builder last wrote. It
+// needs no Python: it only hashes files and compares token values.
+func kitStale(root string, cfg *config, files []string) []string {
+	if _, err := os.Stat(filepath.Join(root, "brand", "kit", "source", "build_kit.py")); err != nil {
+		return nil // no builder, so no manifest to keep
+	}
+	data, err := os.ReadFile(filepath.Join(root, "brand", "kit", "manifest.json"))
+	if err != nil {
+		return []string{"brand/kit/manifest.json is missing; run make brand-kit"}
+	}
+	var m struct {
+		Tokens map[string]string `json:"tokens"`
+		Files  map[string]struct {
+			Sha256 string `json:"sha256"`
+			Bytes  int64  `json:"bytes"`
+		} `json:"files"`
+	}
+	if err := json.Unmarshal(data, &m); err != nil {
+		return []string{"brand/kit/manifest.json: " + err.Error()}
+	}
+	var out []string
+	for _, tok := range sortedKeys(m.Tokens) {
+		was, _ := normalize(m.Tokens[tok])
+		if now := cfg.value(tok); now != was {
+			out = append(out, fmt.Sprintf("brand/kit was built with %s %s, but the token is now %q; run make brand-kit", tok, was, now))
+		}
+	}
+	seen := map[string]bool{}
+	for _, rel := range files {
+		k, ok := strings.CutPrefix(rel, kitDir)
+		if !ok || !kitManaged(k) {
+			continue
+		}
+		seen[k] = true
+		want, ok := m.Files[k]
+		if !ok {
+			out = append(out, fmt.Sprintf("%s is not in the kit manifest: the builder did not make it; run make brand-kit, or remove it", rel))
+			continue
+		}
+		data, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(rel)))
+		if err != nil {
+			out = append(out, err.Error())
+			continue
+		}
+		if sum := sha256.Sum256(data); hex.EncodeToString(sum[:]) != want.Sha256 || int64(len(data)) != want.Bytes {
+			out = append(out, fmt.Sprintf("%s changed since the last make brand-kit; rebuild it rather than edit it", rel))
+		}
+	}
+	for _, k := range sortedKeys(m.Files) {
+		if !seen[k] {
+			out = append(out, fmt.Sprintf("%s%s is in the kit manifest but missing; run make brand-kit", kitDir, k))
 		}
 	}
 	return out
