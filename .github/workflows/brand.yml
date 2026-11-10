@@ -1,0 +1,28 @@
+name: brand
+
+# The brand check guards colours in docs too, so unlike ci.yml it runs on
+# every push and pull request, Markdown-only ones included. It is the
+# cheapest job: Linux, standard-library Go, no module downloads.
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+concurrency:
+  group: brand-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  brand-check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: false
+      - run: make brand-check
