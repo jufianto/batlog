@@ -192,6 +192,9 @@ These carry over from the PRD: the UI adds a view, not a new behaviour.
 
 - **Colour is off when** `NO_COLOR` is set or `TERM=dumb`, as in the
   other commands.
+- **Styles** are ANSI colour numbers, faint, bold and reverse, so the user's
+  terminal theme decides the actual colours. Each is a token in
+  `brand/tokens.json`; see [docs/reference/brand.md](../reference/brand.md).
 - **Glyphs:** Unicode box drawing and block characters only, no Nerd Font
   icons. Without colour the layout and every figure stay the same.
 

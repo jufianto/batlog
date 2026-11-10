@@ -5,6 +5,7 @@
 | [prd/](./prd/) | Product requirements — one page per problem we solve |
 | [adr/](./adr/) | Architecture decision records — why we chose X over Y |
 | [specs/](./specs/) | Functional specs — one per command, the exact behaviour |
+| [reference/](./reference/) | How things are: [the brand](./reference/brand.md) (logo, colours, type) |
 
 **Reading order for a newcomer:** [prd/tracker.md](./prd/tracker.md) →
 [adr/README.md](./adr/README.md) → the spec for whichever command you touch.

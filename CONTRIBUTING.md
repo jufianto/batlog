@@ -46,6 +46,7 @@ real mismatches are how it gets better.
 ```sh
 CGO_ENABLED=0 go build .      # produces ./batlog
 CGO_ENABLED=0 go test ./...   # no test shells out; passes on Linux too
+make test                     # everything CI runs, the brand check included
 ```
 
 Go 1.27 or newer. With an older Go installed, the `toolchain` line in
@@ -64,7 +65,11 @@ no energy (some virtual machines).
 - Keep one change per PR, with tests. Behaviour changes update the command's
   spec in the same PR.
 - CI runs `go vet`, `go test` and `go build` on macOS, plus a Linux
-  cross-compile `go vet`. Changes that touch only docs (`*.md`, `docs/`) skip CI.
+  cross-compile `go vet`. Changes that touch only docs (`*.md`, `docs/`) skip
+  that workflow; the `brand` workflow (`make brand-check`) runs on every change.
+- Anything visual (`batlog ui` styles, colour in command output, the README
+  logo, `brand/`) follows [docs/reference/brand.md](./docs/reference/brand.md):
+  a new colour or style is a token in `brand/tokens.json`.
 - Commit messages say what changed and why, e.g. `fix(top): …` or
   `feat(daemon): …`.
 

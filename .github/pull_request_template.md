@@ -8,3 +8,4 @@
 - [ ] Behaviour changes are reflected in the command's spec in `docs/specs/`
 - [ ] New `--json` fields are documented in the spec
 - [ ] Device captures in `testdata/` have serial numbers removed
+- [ ] Visual changes (styles, colour, logos, `brand/`) follow `docs/reference/brand.md`, and `make brand-check` passes
