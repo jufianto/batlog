@@ -4,21 +4,17 @@
   "vector_svgs": 19,
   "logo_pngs": 19,
   "icon_pngs": 49,
-  "unchanged_input_files": 9,
+  "manifest_files": 111,
   "normalized_source_silhouette_iou": 0.9943666333418079,
   "checks": [
-    "input hashes",
     "vector-only self-contained SVGs without masks",
-    "embedded references equal originals",
-    "PNG alpha, bounds and dimensions",
+    "PNG alpha, bounds, dimensions and token colours",
     "transparent channel and wider micro geometry",
     "ICO resolution directories and ICNS decoding",
     "seven PDF pages and current manual-review hash",
-    "manifest and ZIP file hashes"
+    "manifest file hashes and token values"
   ],
   "limits": [
-    "reconstruction, not pixel identity",
-    "wordmark, cyan and usage rules proposed",
-    "platform integration not performed"
+    "reconstruction, not pixel identity"
   ]
 }

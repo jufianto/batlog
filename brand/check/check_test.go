@@ -127,6 +127,28 @@ func TestMutationsFail(t *testing.T) {
 				edit(t, root, "brand/kit/svg/batlog-mark-cyan.svg", `fill="#0891B2"`, `fill="teal"`)
 			},
 			"paints teal, which maps to no token"},
+		{"a token changed without rebuilding the kit",
+			func(t *testing.T, root string) {
+				edit(t, root, TokensPath, `"value": "#5b6573"`, `"value": "#5b6574"`)
+			},
+			`brand/kit was built with guide.muted #5b6573, but the token is now "#5b6574"; run make brand-kit`},
+		{"a hand-edited kit output is stale",
+			func(t *testing.T, root string) {
+				edit(t, root, "brand/kit/svg/batlog-stacked-ink.svg", "</svg>", "<!-- tweak --></svg>")
+			},
+			"brand/kit/svg/batlog-stacked-ink.svg changed since the last make brand-kit"},
+		{"a file the builder did not make is not in the manifest",
+			func(t *testing.T, root string) {
+				write(t, root, "brand/kit/svg/extra.svg", "<svg/>")
+			},
+			"brand/kit/svg/extra.svg is not in the kit manifest"},
+		{"a kit output that disappears is missing",
+			func(t *testing.T, root string) {
+				if err := os.Remove(filepath.Join(root, "brand/kit/batlog-overview.png")); err != nil {
+					t.Fatal(err)
+				}
+			},
+			"brand/kit/batlog-overview.png is in the kit manifest but missing"},
 		{"a binary file needs an explicit exception",
 			func(t *testing.T, root string) {
 				write(t, root, "brand/blob.bin", "\x00\x01")
