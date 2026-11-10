@@ -1,0 +1,29 @@
+{
+  "brand_name": "batlog",
+  "status": "proposed system using owner-supplied symbol",
+  "colors": {
+    "ink": "#242021",
+    "cyan": "#0891B2",
+    "white": "#FFFFFF",
+    "black": "#000000"
+  },
+  "current_terminal": {
+    "battery": "ANSI 6 / cyan",
+    "charging": "ANSI 2 / green",
+    "cursor_and_warning": "ANSI 3 / yellow",
+    "problem": "ANSI 1 / red",
+    "note": "Theme-dependent values, not fixed brand hex colors."
+  },
+  "proposed_typography": {
+    "wordmark": "JetBrains Mono Semibold",
+    "supporting": "Plus Jakarta Sans Regular/Semibold"
+  },
+  "proposed_usage": {
+    "clear_space": "1/4 of visible battery height",
+    "minimum_width_px": {
+      "primary_symbol": 48,
+      "micro_symbol": 16,
+      "horizontal_lockup": 180
+    }
+  }
+}

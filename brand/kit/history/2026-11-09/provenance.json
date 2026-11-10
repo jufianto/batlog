@@ -1,0 +1,54 @@
+{
+  "date": "2026-11-09",
+  "primary_source": "source/originals/Designing_batlog_logo_symbol_343191ad_2K.jpg",
+  "alternative_source": "source/originals/Design_logo_for_battery_tool_e655feea_2K.jpg",
+  "artwork_status": "Owner-supplied Flow raster concepts; manually reconstructed primary and derived micro/lockup designs. No automatic tracing.",
+  "source_files": {
+    "source/originals/Designing_batlog_logo_symbol_343191ad_2K.jpg": {
+      "sha256": "9e4c7dabf3f61a13be11a89dfbc9fc54c5e6eadb873b481622d3b1cb84c91a5e",
+      "bytes": 1090211
+    },
+    "source/originals/Design_logo_for_battery_tool_e655feea_2K.jpg": {
+      "sha256": "4389b101e99f1ed2bae7c26b29bc43af39b827d7c574ed3e46cee47f01ce66b1",
+      "bytes": 751311
+    },
+    "source/app-snapshots/style.go": {
+      "sha256": "ae71201997fb8a967e20da847354f7e7944eedc0521e143417c77b7d8b6183a1",
+      "bytes": 2356
+    },
+    "source/app-snapshots/README.md": {
+      "sha256": "d08526b824ddb67a7ffbcd9023f91b028518fff185414c0f3ae2512eed92d110",
+      "bytes": 8477
+    },
+    "source/fonts/JetBrainsMono-SemiBold.ttf": {
+      "sha256": "12d4b18fe6e1af528e4bea69cb0997aeff22f9e52fccffcf66342dd88aa32ab8",
+      "bytes": 273504
+    },
+    "source/fonts/OFL-JetBrainsMono.txt": {
+      "sha256": "a76abf002c49097d146e86740a3105a5d00450b1592e820a1109a8c5680cd697",
+      "bytes": 4399
+    },
+    "source/fonts/PlusJakartaSans-600.ttf": {
+      "sha256": "7f84de32c933a517604990b80d24406e88868767f7ee3ba3b4ad3e3870cc5a80",
+      "bytes": 29532
+    },
+    "source/fonts/OFL-PlusJakartaSans.txt": {
+      "sha256": "995c7199cab65954f545996326755daee7b63cc6b42b06c13da1f9502ab08a99",
+      "bytes": 4402
+    },
+    "source/fonts/PlusJakartaSans-400.ttf": {
+      "sha256": "02a20292cad94f8ec5850b8217818bada6758d1ef8212253a3030d993af0589a",
+      "bytes": 29468
+    }
+  },
+  "normalized_ink": "#242021",
+  "color_method": "Median RGB of dark source pixels below grayscale 120, excluding a 24px outer frame; grain and shading flattened.",
+  "proposed_cyan": "#0891B2",
+  "type_proposal": "JetBrains Mono Semibold, lowercase outlined batlog; Plus Jakarta Sans supporting type.",
+  "font_sources": [
+    "https://github.com/JetBrains/JetBrainsMono/tree/master/fonts/ttf",
+    "https://github.com/JetBrains/JetBrainsMono/blob/master/OFL.txt",
+    "Bundled Plus Jakarta Sans fonts and OFL license reused from an earlier brand kit."
+  ],
+  "adoption": "Local branding kit only; application unchanged."
+}
