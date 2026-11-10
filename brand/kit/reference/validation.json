@@ -1,0 +1,24 @@
+{
+  "date": "2026-11-09",
+  "result": "pass",
+  "vector_svgs": 19,
+  "logo_pngs": 19,
+  "icon_pngs": 49,
+  "unchanged_input_files": 9,
+  "normalized_source_silhouette_iou": 0.9943666333418079,
+  "checks": [
+    "input hashes",
+    "vector-only self-contained SVGs without masks",
+    "embedded references equal originals",
+    "PNG alpha, bounds and dimensions",
+    "transparent channel and wider micro geometry",
+    "ICO resolution directories and ICNS decoding",
+    "seven PDF pages and current manual-review hash",
+    "manifest and ZIP file hashes"
+  ],
+  "limits": [
+    "reconstruction, not pixel identity",
+    "wordmark, cyan and usage rules proposed",
+    "platform integration not performed"
+  ]
+}

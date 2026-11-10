@@ -117,6 +117,16 @@ func TestMutationsFail(t *testing.T) {
 				write(t, root, "brand/notes.md", "built in /"+"Users/someone/kit\n")
 			},
 			"brand/notes.md:1 names"},
+		{"baked kit artwork drifts from its token",
+			func(t *testing.T, root string) {
+				edit(t, root, "brand/kit/svg/batlog-mark-white.svg", `fill="#FFFFFF"`, `fill="#F5F5F5"`)
+			},
+			`brand/kit/svg/batlog-mark-white.svg:1 line 1 paints #f5f5f5, which maps to no token in its surface "brand/kit/svg/*-white.svg"`},
+		{"a named colour in artwork must be a token too",
+			func(t *testing.T, root string) {
+				edit(t, root, "brand/kit/svg/batlog-mark-cyan.svg", `fill="#0891B2"`, `fill="teal"`)
+			},
+			"paints teal, which maps to no token"},
 		{"a binary file needs an explicit exception",
 			func(t *testing.T, root string) {
 				write(t, root, "brand/blob.bin", "\x00\x01")

@@ -1,0 +1,15 @@
+{
+  "date": "2026-11-09",
+  "sha256": "0eb6c8a0d5aaa877c250bf2ef3c7af63343f0298cb23ad08edca382fc56510f0",
+  "pages_reviewed": [
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7
+  ],
+  "method": "Poppler 100dpi rendering; all seven pages visually inspected. Updated comparison and platform-format pages individually checked, unchanged pages rechecked in final montage.",
+  "artwork_review": "Originals, normalized source comparison, exact-arc curve details, reverse mark and actual/enlarged 16-64px micro symbols inspected. Proposed type/accent/usage remain for owner review."
+}
