@@ -164,6 +164,11 @@ func TestMutationsFail(t *testing.T) {
 				edit(t, root, "README.md", `<img src="brand/kit/svg/batlog-horizontal-ink.svg" alt="batlog" width="280">`, `batlog`)
 			},
 			`README.md: mapped name "img" (token brand.ink) is no longer in the file`},
+		{"a colour function in artwork has no token",
+			func(t *testing.T, root string) {
+				edit(t, root, "brand/kit/svg/batlog-mark-black.svg", `fill="#000000"`, `fill="rgb(0, 0, 0)"`)
+			},
+			"paints rgb(0, 0, 0), which maps to no token"},
 		{"a binary file needs an explicit exception",
 			func(t *testing.T, root string) {
 				write(t, root, "brand/blob.bin", "\x00\x01")
